@@ -26,6 +26,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
+| [results/m1/](results/m1/) | Environment and compute verification: the two check suites, their outputs, and the captured manifest. Re-run them after any dependency change. |
 
 The original `dreamerv3_implementation_plan.md` was split into the four docs above; it is preserved
 unmodified at commit `da9a55a` and no longer exists in the tree, so there is one copy of each claim.
@@ -196,10 +197,26 @@ training settings are context only, never the comparison.
 ### Verification Before Done
 - Never consider a task complete without demonstrating it works
 - Check logs, run tests, or diff behavior when relevant
-- No build or test command exists yet. When one does, record it here verbatim and copy-pasteable.
-  If the project grows a compiled or generated step, add the rule that a rebuild must precede
-  testing — an unrebuilt edit tests the previous binary and passes — and declare inputs as
-  dependencies in the build config so an edit triggers a rebuild
+- **Always use the repo venv — `.venv/bin/python`, Python 3.12.11.** The system `python3` is 3.13
+  and **cannot install this project's dependencies** (see Known Issues). There is no compiled or
+  generated step, so no rebuild rule is needed yet.
+- Environment and compute verification, copy-pasteable:
+
+  ```bash
+  .venv/bin/python results/m1/check_torch_compute.py
+  ```
+
+  ```bash
+  .venv/bin/python results/m1/check_env_render.py
+  ```
+
+  Both exit non-zero on any failed check and print a `PASS`/`FAIL` line per check. Re-run both after
+  any dependency change. Recreating the environment from scratch:
+
+  ```bash
+  uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
+  ```
+- No model code and no unit tests exist yet. When a test command exists, record it here verbatim
 - A test that passes where the bug cannot occur is not a test — confirm it fails without its fix
 - **Domain testing hazards for this project** (each is a validation gate that a naive assertion
   passes while the bug survives):
@@ -222,6 +239,10 @@ training settings are context only, never the comparison.
     the value is 0, not that it is small.
   - **Encoder scales `x/255 − 0.5`; the decoder target is `x/255` with no shift.** The asymmetry is
     real. A test that only checks output range passes either way.
+  - **TF32 breaks hand-computed fixtures.** Measured on this GPU: max|GPU−CPU| on a 2048² fp32
+    matmul is **6.8e-02 with TF32 on** and **1.3e-04 off** — a 500× difference. Set
+    `torch.backends.cuda.matmul.allow_tf32 = False` and `torch.backends.cudnn.allow_tf32 = False`
+    in any test asserting against analytic values (M2, M7).
 - Ask: "Would a senior engineer approve this?"
 - Before quoting a committed number, check the tree still reproduces it
 
@@ -271,63 +292,67 @@ code already says creates drift.
 
 ## Current Focus
 
-**M1 — environment interface and sequence replay.** M0 closed 2026-09-17; the specification in
-[docs/spec.md](docs/spec.md) is implementation-ready. 0 tests, 0 model code, **nothing measured**.
+**M1 — environment interface and sequence replay.** M0 closed 2026-09-17. **The two blocking
+environment checks now pass: 40/40** across [results/m1/](results/m1/). The toolchain is no longer a
+risk; what remains is that **no model code exists**.
 
-**Two blocking checks come first**, because neither dependency is installed and the GPU is Blackwell
-(`sm_120`, compute capability 12.0):
+Working environment: `.venv`, **Python 3.12.11**, torch **2.13.0+cu129** with `sm_120`, mujoco
+3.13.0, dm-control 1.0.46. Pins in [requirements.txt](requirements.txt).
 
-1. A PyTorch build carrying `sm_120` kernels — record `torch.cuda.get_arch_list()` and the exact wheel.
-2. `dm_control` + MuJoCo rendering headless under EGL on Python 3.13.
+Next, in order:
 
-Then M1 proper: pixel rendering, the transition record, sequence replay, and the `is_last` vs
-`is_terminal` contract — all **specified** in [spec.md §7](docs/spec.md), so M1 implements and
-validates rather than decides. Record the random-policy return floor and environment throughput under
-[results/README.md](results/README.md)'s rules.
+1. Pixel rendering and the environment wrapper against the contract in [spec.md §7](docs/spec.md) —
+   camera 0, uint8 HWC at 64×64, `is_terminal = discount == 0` and **never** `is_last`.
+2. The transition record and sequence replay, with the recomputed burn-in prefix `P = 5`.
+3. The M1 gate: a deterministic toy trajectory that catches one-step action/reward misalignment, plus
+   the time-limit and true-terminal target cases.
+4. Record the **random-policy return floor** (§10-5, 20 episodes/task) and environment throughput
+   (§10-6) under [results/README.md](results/README.md)'s rules.
 
-`Why It Is a Target` in this file stays `TBD` by construction: nothing has been profiled.
+`Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing of this project has been
+profiled.
 
 ## Last Session
 
-**Session 3 — closed M0.** 3 commits.
+**Session 4 — built the environment and validated compute.** 1 commit.
 
-- **Pinned the reference at `e3f02248693a79dc8b0ebd62c93683888ddaccfe`** after finding the repository
-  has two disjoint eras matching the two paper versions: a wholesale rewrite landed two days before
-  arXiv v2 was posted, and `size1m` was added later still (2024-12-07). A paper-contemporaneous pin
-  would have specified a different model and could not cite the preset this project scales from.
-- **Resolved the three ambiguities the PDFs could not settle**, each by code trace with line-anchored
-  permalinks: the λ-return bootstraps at `v[t+1]` (v2's `v_t` is a typo); entropy is *subtracted* in
-  the minimized actor loss; replay-critic gradients **do** reach the encoder and RSSM, which is why
-  v1's "without sharing gradients" sentence was deleted.
-- **Wrote the full architecture and objective spec**, including the block-diagonal cell's real
-  connectivity, the `contdisc` discount location, the `bounded_normal` policy (no density correction
-  needed), LaProp, and a gradient-routing table separating the blocked actor path from the live
-  replay-critic path.
-- **Two evidence artifacts under `results/m0/`.** The twohot check shows the v1/v2 estimator gap
-  (9.05 vs 50 on a case with true mean 50) and that a naive float32 readout returns −1.0 where 0 is
-  required; it states explicitly what is *not* established about unbiasedness. The parameter count is
-  **derived from the spec** at 686,846 and agreed to the digit with an independent enumeration.
-- **Still nothing measured and nothing implemented.** `sm_120` PyTorch, `dm_control` and MuJoCo are
-  all verified **absent**; every count, timing and return remains `unmeasured`.
+- **Created `.venv` and validated the toolchain end to end: 40/40 checks.** `sm_120` is present in
+  torch 2.13.0+cu129's arch list and matches the device; matmul, the encoder conv, the
+  block-diagonal einsum and float32 RMSNorm all agree GPU-vs-CPU with TF32 off.
+- **Found and resolved a real blocker: Python 3.13 cannot run this project.** `dm-control` hard-depends
+  on `labmaze`, which ships no cp313 wheel and needs bazel from source. The M0 risk note had
+  predicted a 3.13 problem but named the wrong cause — `mujoco` and `dm-control` are both fine on
+  3.13. Rebuilt on 3.12.11 rather than using `--no-deps`, so `requirements.txt` reinstalls cleanly
+  and `pip check` passes.
+- **Confirmed the central M1 hazard against the real simulator**, not just from source: both tasks
+  end at step 1000 with `discount == 1.0` and **no step in either episode has `discount == 0`**. A
+  `1 − is_last` continuation target would zero the bootstrap on every episode of both tasks.
+- **Recorded verified env facts**: Walker 6-dim / Cartpole 1-dim actions in `[-1, 1]`; physics
+  substeps **10 vs 1** — they differ per task; ~920–1000 control steps/s including a 64×64 render.
+- **Measured that TF32 costs 500× precision** on this GPU and added it to the testing hazards, since
+  the M2 and M7 gates assert against hand-computed values.
 
 ## Known Issues
 
-- **No dependency needed to run anything is installed.** `torch`, `dm_control` and `mujoco` all fail
-  to import. The GPU is **Blackwell, compute capability 12.0 (`sm_120`)**, so PyTorch must carry
-  `sm_120` kernels (CUDA 12.8+); Python is 3.13.13, which `dm_control` may not support. This pair is
-  the largest unvalidated risk in the project and it **blocks M1**.
+- **Python 3.13 cannot install this project; use `.venv` (3.12.11) for everything.** `dm-control`
+  requires `labmaze`, whose latest release (1.0.6) has wheels only to cp312 and otherwise needs bazel.
+  The system `python3` is 3.13.13, so a bare `python3 script.py` will fail on imports. Also: this
+  machine's `python3.12` is uv-managed with a broken `ensurepip`, so `python -m venv` cannot create
+  the environment — `uv venv --seed` does, and pip does the installs.
+- **torch must come from the `cu129` index, not PyPI.** The GPU is Blackwell `sm_120` and the driver
+  is 575.64.03; CUDA 13.0 wheels need driver ≥ 580, so the newest PyPI default build is excluded.
 - **`size1m` is ~0.69M parameters by derivation, not 1M, and the figure is not measured.** It is also
   below the paper's smallest evaluated row (12M), so no result can be compared to a published number.
   The measured count is owed at M3–M4 from `sum(p.numel())`.
-- **Specification is not implementation.** [spec.md §11](docs/spec.md) tracks `specified` /
-  `implemented` / `validated` separately. Everything is `specified`; nothing is the other two. Do not
-  read a completed spec section as working code.
+- **Specification is not implementation.** [spec.md §11](docs/spec.md) tracks the three axes. The
+  *environment* is now `validated`; the *architecture* is only `specified`, and **nothing is
+  `implemented`**. A validated toolchain says the compiler works, not that the model exists.
 - **Four transcription traps are documented but unguarded** until tests exist: the block-GRU gate
   split, the `BlockLinear` fan-in (2.83× init error if done per-block), the reference's inverted
-  `sg(…, skip=)` polarity, and the encoder/decoder image-scaling asymmetry. All are in
-  [spec.md](docs/spec.md) and in the hazards list above.
-- **No results exist beyond `results/m0/`**, which contains derivations and numerical checks only —
-  no measurement of any model. No number may be quoted from anywhere else.
+  `sg(…, skip=)` polarity, and the encoder/decoder image-scaling asymmetry.
+- **No measurement of any model exists.** `results/m0/` holds derivations, `results/m1/` holds
+  toolchain checks. No return, parameter count, VRAM figure or timing of this project's model exists
+  anywhere.
 
 ---
 

@@ -61,32 +61,57 @@ Two categories, never mixed: what is **installed and verified on this machine to
 
 ### Installed and verified (2026-09-17)
 
-| Item | Value | How observed |
-|---|---|---|
-| OS | Ubuntu 22.04.5 LTS, kernel 6.8.0-65-generic | `/etc/os-release`, `uname -r` |
-| CPU | AMD Ryzen 9 7950X, 16 cores / 32 threads | `lscpu` |
-| System RAM | 124 GiB total | `free -g` |
-| GPU | NVIDIA RTX PRO 4000 Blackwell, 24467 MiB | `nvidia-smi` |
-| GPU compute capability | **12.0 (sm_120)** | `nvidia-smi --query-gpu=compute_cap` |
-| NVIDIA driver | 575.64.03 | `nvidia-smi` |
-| CUDA toolkit | 12.9, V12.9.86 | `nvcc --version` |
-| Python | 3.13.13 (`~/miniconda3/bin/python3`) | `python3 --version` |
-| NumPy | 2.3.4 | import probe |
+Captured by [`capture_manifest.py`](../results/m1/capture_manifest.py) →
+[`env-manifest-2026-09-17.json`](../results/m1/env-manifest-2026-09-17.json). Exact pins for
+reinstallation: [`requirements.txt`](../requirements.txt).
 
-### Proposed requirements — NOT YET INSTALLED
+| Item | Value |
+|---|---|
+| OS | Ubuntu 22.04.5 LTS, kernel 6.8.0-65-generic |
+| CPU | AMD Ryzen 9 7950X, 16 cores / 32 threads |
+| System RAM | 124 GiB |
+| GPU | NVIDIA RTX PRO 4000 Blackwell, 24467 MiB, driver 575.64.03 |
+| GPU compute capability | **12.0 (`sm_120`)** |
+| CUDA toolkit (system) | 12.9, V12.9.86 |
+| **Python** | **3.12.11**, venv at `.venv` |
+| **torch** | **2.13.0+cu129**, bundled CUDA 12.9, cuDNN 9.20.0 |
+| torch arch list | `sm_75 sm_80 sm_86 sm_90 sm_100 sm_120` — **`sm_120` present** |
+| mujoco | 3.13.0 |
+| dm-control | 1.0.46 |
+| numpy | 2.5.3 |
+| scipy | 1.18.1 |
+| labmaze | 1.0.6 (transitive; unused by the DMControl suite) |
+| GL backend | EGL, `libEGL_nvidia.so.0` present, `DISPLAY` unset |
 
-| Item | Requirement | Risk |
-|---|---|---|
-| PyTorch | a build carrying **sm_120** kernels (CUDA 12.8+) | **Verified absent.** `import torch` fails. sm_120 is recent; a stock wheel without sm_120 will either fail to launch kernels or silently fall back. Pin the exact wheel and record `torch.cuda.get_arch_list()`. |
-| `dm_control` | version TBD at install | **Verified absent.** Must be checked against Python 3.13. |
-| `mujoco` | version TBD at install | **Verified absent.** |
-| EGL / headless GL | `MUJOCO_GL=egl` | The reference sets this default ([`dmc.py#L23-L24`](https://github.com/danijar/dreamerv3/blob/e3f02248693a79dc8b0ebd62c93683888ddaccfe/embodied/envs/dmc.py#L23-L24)). Offscreen rendering must be confirmed working before any collection. |
+`pip freeze` sha256 `3790431efebf6f6b0452759d9ef675f75b9f8efee400bcdf58ba02c6f788517b`, 52 packages.
 
-**The Blackwell/Python-3.13 combination is the single largest unvalidated environment risk.** Its
-acceptance check is in §10 and it gates M1.
+### Two environment constraints discovered while building this, both load-bearing
 
-At install time, replace every "TBD at install" with the exact observed version and record the
-freeze in this section — not in prose elsewhere.
+**1. Python 3.13 does not work; 3.12 does.** The risk this section previously flagged was real, but
+the mechanism was not the one predicted. `mujoco` publishes cp313 wheels and `dm-control` is pure
+Python — both are fine on 3.13. The blocker is the transitive dependency **`labmaze`**, whose latest
+release (1.0.6) ships wheels only to **cp312**. On 3.13 pip falls back to the sdist, which builds with
+**bazel**, which is not installed:
+
+```
+error: command 'bazel' failed: No such file or directory
+ERROR: Failed building wheel for labmaze
+```
+
+`labmaze` is needed only by `dm_control.locomotion`, which this project never imports — but it is a
+hard `install_requires`, so the whole transaction rolls back. **Python 3.12.11 was chosen over a
+`--no-deps` workaround** so that `requirements.txt` reinstalls cleanly and `pip check` passes; a
+skipped hard dependency would leave the environment permanently inconsistent for anyone else.
+
+**2. torch must come from the `cu129` index, not PyPI.** The GPU is `sm_120` (Blackwell) and the
+driver is 575.64.03. CUDA 13.0 wheels require driver ≥ 580, so the newest PyPI default build
+(`cu130`) is excluded; `cu129` matches the system toolkit exactly and is driver-compatible.
+`sm_120` presence in the arch list is verified, not assumed.
+
+Reinstalling needs one further quirk: this machine's `python3.12` is **uv-managed** and its
+`ensurepip --upgrade --default-pip` path fails, so `python -m venv` cannot create the environment.
+`uv venv --seed` creates it and `pip` performs every install — no alternative resolver is involved.
+The commands are recorded verbatim at the top of [`requirements.txt`](../requirements.txt).
 
 ## 3. Paper → pinned code → project decision
 
@@ -1083,8 +1108,8 @@ resize, crop, or normalization is permitted; M1's gate checks this by identity.
 | Item | Decision |
 |---|---|
 | Space | bounded continuous, `[low, high]` taken from `dm_control`'s `action_spec()`; asserted finite |
-| Expected dimensions | Walker Walk **6**, Cartpole Swingup **1** — `unmeasured`, confirm at M1 against the installed suite (§10) |
-| Bounds | expected `[-1, 1]` for both — `unmeasured`, confirm at M1 |
+| Dimensions | Walker Walk **6**, Cartpole Swingup **1** — **verified** against `action_spec()` on the installed suite ([`env-render-2026-09-17.txt`](../results/m1/env-render-2026-09-17.txt)) |
+| Bounds | **`[-1, 1]`** for both, `float64` — **verified**; asserted finite |
 | Clipping | actions clipped to the spec range before `env.step` |
 | Repeat | **1.** No aggregation occurs at R=1. |
 
@@ -1132,6 +1157,12 @@ zero the bootstrap on every episode of both tasks and silently truncate every re
 `TimeLimit` (`wrappers.py#L28-L55`) sets only `is_last`, never `is_terminal`, consistent with the
 above. For DMControl the limit comes from `dm_control` itself via `time_step.last()`, so no extra
 wrapper is used.
+
+> **Confirmed empirically, not just read from source.** A full random-policy episode was run on each
+> task ([`env-render-2026-09-17.txt`](../results/m1/env-render-2026-09-17.txt)). Both end at step
+> 1000 with `last() == True` and **`discount == 1.0`**, and **no step in either episode had
+> `discount == 0`**. So `is_terminal` is `False` for the entire episode including its final step, and
+> a `1 − is_last` continuation target would zero the bootstrap on every episode of both tasks.
 
 ### 7.4 Transition record and alignment
 
@@ -1183,8 +1214,19 @@ Five distinct counters. Conflating any two misstates the data budget.
 | `gradient_step` | one optimizer update | Compute accounting. |
 | `train_position` | one `(batch, time)` position that carries loss | Loss-reduction denominator. `B × (T − P)` per gradient step. |
 
-Episode length for both tasks is expected to be **1000 control steps** — `unmeasured`, confirm at M1
-(§10).
+**Verified on the installed simulator** ([`env-render-2026-09-17.txt`](../results/m1/env-render-2026-09-17.txt)):
+
+| | Walker Walk | Cartpole Swingup |
+|---|---|---|
+| Episode length | **1000** control steps | **1000** control steps |
+| `control_timestep` | 0.025 s | 0.01 s |
+| Physics timestep | 0.0025 s | 0.01 s |
+| **Physics substeps per control step** | **10** | **1** |
+| Per-step reward range observed | [0.0050, 0.1537] | [8.06e-09, 0.0359] |
+| Throughput incl. 64×64 render | 923 steps/s | 996 steps/s |
+
+The substep counts **differ between the two tasks** — Cartpole's physics timestep equals its control
+timestep. This is exactly why `physics_substep` is never a budget unit.
 
 ### 7.7 Training ratio — units reconciled
 
@@ -1287,10 +1329,10 @@ artifact under `results/` supports it. Each has a milestone and a check that dec
 
 | # | Quantity | Milestone | Acceptance check |
 |---|---|---|---|
-| 1 | PyTorch sm_120 support | **M1 (blocking)** | `torch.cuda.get_arch_list()` contains `sm_120`; a matmul and a conv2d run on GPU and match CPU within tolerance. Record the exact wheel. |
-| 2 | `dm_control` + MuJoCo on Python 3.13, EGL offscreen render | **M1 (blocking)** | A 64×64 frame renders headless from both tasks; `MUJOCO_GL=egl`; frame is uint8 and non-constant. |
-| 3 | Action dimensions and bounds | M1 | Observed `action_spec()` matches §7.2; recorded, not assumed. |
-| 4 | Episode length, physics substeps per control step | M1 | Counted from a real episode of each task. |
+| 1 | PyTorch `sm_120` support | M1 | **VALIDATED 2026-09-17.** `sm_120` present in torch 2.13.0+cu129's arch list and matches the device; matmul, the encoder conv, the block-diagonal einsum and float32 RMSNorm all agree GPU-vs-CPU with TF32 off. 14/14 in [`torch-compute-2026-09-17.txt`](../results/m1/torch-compute-2026-09-17.txt) |
+| 2 | `dm_control` + MuJoCo, EGL offscreen render | M1 | **VALIDATED 2026-09-17 on Python 3.12.11** (3.13 is not viable — §2). Both tasks render 64×64×3 uint8 non-constant frames headless under `MUJOCO_GL=egl`. 26/26 in [`env-render-2026-09-17.txt`](../results/m1/env-render-2026-09-17.txt) |
+| 3 | Action dimensions and bounds | M1 | **VALIDATED 2026-09-17.** Walker 6-dim, Cartpole 1-dim, both `[-1, 1]` float64 — observed, matching §7.2's prediction |
+| 4 | Episode length, physics substeps per control step | M1 | **VALIDATED 2026-09-17.** 1000 control steps for both; substeps **10** (Walker) vs **1** (Cartpole). Terminal-vs-time-limit semantics also confirmed empirically — §7.3 |
 | 5 | Random-policy return floor | M1 | 20 episodes per task under the final reward convention; mean and sd recorded. |
 | 6 | Environment throughput (`env_step`/s incl. render) | M1 | Steady-state rate over ≥10k steps, GPU confirmed free first. |
 | 7 | **Instantiated parameter count** | **M3–M4** | Counted from the built modules with `sum(p.numel())`, broken down per module, against the §4 architecture. Resolves the circularity: §4 specifies, the count is measured once modules exist. **The name `size1m` is not evidence of any count.** |
@@ -1312,6 +1354,16 @@ implementation**.
 | **implemented** | Code exists that realizes the specification. |
 | **validated** | The relevant milestone gate passed, with a committed artifact under `results/`. |
 
-Current state of this document: **everything in §1–§9 is `specified`. Nothing is `implemented`.
-Nothing is `validated`.** The per-requirement matrix is
-[`results/m0/m0-audit-2026-09-17.md`](../results/m0/m0-audit-2026-09-17.md).
+Current state, as of 2026-09-17:
+
+| Scope | Status |
+|---|---|
+| Architecture, objectives, gradient routing, environment contract (§3–§9) | **`specified`** |
+| Any model mechanism | **not `implemented`** — no model code exists |
+| Environment and compute compatibility (§10-1 … §10-4) | **`validated`** — 40/40 checks, artifacts under [`results/m1/`](../results/m1/) |
+| Everything else in §10 | **`unmeasured`** |
+
+The M0 per-requirement matrix is
+[`results/m0/m0-audit-2026-09-17.md`](../results/m0/m0-audit-2026-09-17.md). Note that a `validated`
+environment says the toolchain runs correctly; it says nothing about whether this project's
+architecture is implemented against it.

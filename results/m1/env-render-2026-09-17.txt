@@ -1,0 +1,109 @@
+# M0 deferred items 2, 3, 4 — simulator, headless render, env contract
+# python 3.12.11  MUJOCO_GL=egl
+
+## Versions
+  mujoco       3.13.0
+  dm-control   1.0.46
+  numpy        2.5.3
+  scipy        1.18.1
+  labmaze      1.0.6
+
+## walker_walk
+  [PASS] walker_walk: suite.load
+  action_spec  shape=(6,) dim=6 dtype=float64
+               min=[-1.] max=[1.]
+  [PASS] walker_walk: action bounds finite
+  [PASS] walker_walk: action bounds are [-1, 1]
+  control_timestep 0.025 s   physics timestep 0.0025 s
+  [PASS] walker_walk: physics substeps per control step is an integer (10) — 10 substeps
+  [PASS] walker_walk: reset gives first()==True and reward None
+  render       shape=(64, 64, 3) dtype=uint8 min=19 max=255 unique=223
+  [PASS] walker_walk: EGL offscreen render succeeds at 64x64
+  [PASS] walker_walk: frame dtype is uint8
+  [PASS] walker_walk: frame is non-constant
+  episode      1000 control steps, reward range [0.001993, 0.1473], sum 30.06
+  [PASS] walker_walk: episode length is 1000 control steps — observed 1000
+  [PASS] walker_walk: per-step reward within [0, 1]
+  final step   last()=True  discount=1.0
+  [PASS] walker_walk: ends with last()==True
+  [PASS] walker_walk: final discount is 1.0, NOT 0 — a TIME LIMIT, not a terminal — discount=1.0
+  [PASS] walker_walk: no step in the episode had discount 0
+  throughput   934.7 control steps/s including a 64x64 render each step
+
+## cartpole_swingup
+  [PASS] cartpole_swingup: suite.load
+  action_spec  shape=(1,) dim=1 dtype=float64
+               min=[-1.] max=[1.]
+  [PASS] cartpole_swingup: action bounds finite
+  [PASS] cartpole_swingup: action bounds are [-1, 1]
+  control_timestep 0.01 s   physics timestep 0.01 s
+  [PASS] cartpole_swingup: physics substeps per control step is an integer (1) — 1 substeps
+  [PASS] cartpole_swingup: reset gives first()==True and reward None
+  render       shape=(64, 64, 3) dtype=uint8 min=10 max=227 unique=160
+  [PASS] cartpole_swingup: EGL offscreen render succeeds at 64x64
+  [PASS] cartpole_swingup: frame dtype is uint8
+  [PASS] cartpole_swingup: frame is non-constant
+  episode      1000 control steps, reward range [7.469e-12, 0.03556], sum 5.38
+  [PASS] cartpole_swingup: episode length is 1000 control steps — observed 1000
+  [PASS] cartpole_swingup: per-step reward within [0, 1]
+  final step   last()=True  discount=1.0
+  [PASS] cartpole_swingup: ends with last()==True
+  [PASS] cartpole_swingup: final discount is 1.0, NOT 0 — a TIME LIMIT, not a terminal — discount=1.0
+  [PASS] cartpole_swingup: no step in the episode had discount 0
+  throughput   991.1 control steps/s including a 64x64 render each step
+
+## Verdict: 26/26 checks passed
+
+{
+  "python": "3.12.11",
+  "mujoco": "3.13.0",
+  "mujoco_gl": "egl",
+  "camera_id": 0,
+  "tasks": {
+    "walker_walk": {
+      "action_dim": 6,
+      "bounds": [
+        -1.0,
+        1.0
+      ],
+      "control_timestep": 0.025,
+      "physics_timestep": 0.0025,
+      "substeps": 10,
+      "episode_steps": 1000,
+      "final_discount": 1.0,
+      "reward_min": 0.0019928897388774517,
+      "reward_max": 0.14730453814674124,
+      "render_shape": [
+        64,
+        64,
+        3
+      ],
+      "render_dtype": "uint8",
+      "steps_per_s_with_render": 934.7
+    },
+    "cartpole_swingup": {
+      "action_dim": 1,
+      "bounds": [
+        -1.0,
+        1.0
+      ],
+      "control_timestep": 0.01,
+      "physics_timestep": 0.01,
+      "substeps": 1,
+      "episode_steps": 1000,
+      "final_discount": 1.0,
+      "reward_min": 7.469121605242011e-12,
+      "reward_max": 0.035563636008452394,
+      "render_shape": [
+        64,
+        64,
+        3
+      ],
+      "render_dtype": "uint8",
+      "steps_per_s_with_render": 991.1
+    }
+  },
+  "checks_passed": 26,
+  "checks_total": 26,
+  "failed": []
+}
