@@ -1,43 +1,14 @@
-# DreamerV3 Reproduction: Updated Implementation Plan
+# Milestones M0–M9
 
-## Project context
+**Read when starting or closing a milestone.** Relocated verbatim from
+`dreamerv3_implementation_plan.md` (preserved at commit `da9a55a`). M10 lives in
+[experiment.md](experiment.md); starting values live in [config.md](config.md).
 
-Build an independent, reduced-scale PyTorch implementation of DreamerV3 that learns visual control through imagined latent trajectories. The target hardware is one **RTX Pro 4000 with 24 GB VRAM**, supported by the available Ryzen 7950X and 128 GB system RAM.
+Keep the dependency order. Complete the implementation and establish learning before launching the
+final horizon study. **A milestone is complete when its validation evidence and reproducible
+configuration are recorded** — not when the code runs.
 
-Dreamer learns a world model from real experience, predicts possible futures in latent space, and uses those predictions to train an actor and critic. DreamerV3 adds stabilization methods intended to make this process work across diverse tasks with a shared configuration. This project will reproduce the central learning mechanism and relevant V3 methods at smaller scale. Its two-task evaluation will support a limited reproduction claim, rather than the paper's full cross-domain result. The algorithm specification is [Mastering Diverse Domains through World Models, arXiv v2](https://arxiv.org/pdf/2301.04104v2).
-
-The project should produce evidence of three capabilities: implementing a research algorithm, diagnosing interactions between its components, and conducting a controlled experiment. It complements existing representation-learning, probabilistic-modeling, CUDA, and serving work by adding action-conditioned dynamics, visual perception, and sequential decision-making.
-
-**Primary task:** DMControl Walker Walk from 64×64 RGB images. **Validation task:** Cartpole Swingup from the same observation format. Train a separate agent for each task. Vector observations are a development aid; final agents receive pixels and their action history, without privileged simulator state.
-
-**Experimental question:** How does imagination horizon affect real-environment return, multi-step prediction error, and compute cost in a reduced-capacity world model?
-
-Keep the dependency order M0–M10. Complete the implementation and establish learning before launching the final horizon study. A milestone is complete when its validation evidence and reproducible configuration are recorded.
-
-## Scope and initial configuration
-
-The values below are starting choices to qualify during development. Hardware fit and learning quality must be measured. Final settings are frozen at the end of M9, before the final experiment seeds are run.
-
-| Item | Initial choice | Qualification rule |
-|---|---|---|
-| Framework | PyTorch; eager execution first | Add compilation or mixed precision only after correctness checks |
-| Observations | 64×64 RGB | Identical preprocessing in training and evaluation |
-| Tasks | Walker Walk; Cartpole Swingup | Same shared learning settings; task-specific action dimensions |
-| Recurrent state | 512 deterministic features | Increase capacity only if a diagnosed limitation warrants it before final runs |
-| Stochastic state | 32 categorical variables, 4 classes each | Record as a deliberate compact configuration |
-| Encoder/decoder and MLP widths | Compact networks selected in M0 | Record exact layers, activations, normalization, and measured parameter count |
-| Training sequences | Start with batch 16, length 64 | Treat any context/burn-in prefix separately from loss-bearing positions |
-| Imagination | H=15 transitions; H+1 latent states | Final Walker comparison uses H∈{5,15,30} |
-| Discount / return mixing | γ=0.997; λ=0.95 | Freeze after source reconciliation |
-| Collection | One environment first; action repeat 1 | Log native control steps separately from agent decisions and physics substeps |
-| Replay | CPU-resident uint8 frames; initial capacity 500,000 transitions | Measure total RAM use and avoid duplicate image storage |
-| Update ratio | Start with 64 replay training positions per collected transition | Log the exact definition and realized ratio; qualify learning before freezing |
-| Initial random collection | 5,000 agent transitions | Preserve the same warm-up budget in final comparisons |
-| Planning budgets | Walker: 1M control steps/run; Cartpole: 500K/run | Qualify cost and learning in M9; all Walker horizon conditions receive the same final budget |
-
-The [author-maintained configuration](https://github.com/danijar/dreamerv3/blob/main/dreamerv3/configs.yaml) supplies a useful compact scale reference through `size1m`, including deterministic size 512 and four classes. Its current defaults and architecture are not automatically equivalent to the pinned paper version. Record the actual parameter count rather than calling this implementation “1M parameters” from the preset name.
-
-The initial update ratio and budgets are project choices, not claims about the paper's settings or guaranteed convergence. Runtime is estimated from measured pilots. If the compact system needs more capacity or updates, resolve that before the final study and apply the resulting configuration consistently.
+---
 
 ## M0 — Freeze the algorithm specification and experiment contract
 
@@ -181,72 +152,3 @@ Checkpoint model/optimizer states, slow critic, normalization statistics, RNG st
 **Validation gate:** Both pixel tasks demonstrate real learning in development runs; checkpoint/resume works; H=30 fits with memory headroom; and final runtime estimates are recorded. The final study starts only after this gate. If it fails, the deliverable is an investigated implementation limitation, not a claimed successful reproduction.
 
 **Deliverable:** Frozen configuration, working online learner, resource profile, and final run manifest.
-
-## M10 — Reproduction results and imagination-horizon experiment
-
-**Purpose:** Turn a working implementation into quantitative evidence.
-
-### A. Final run matrix
-
-| Task | Imagination horizon | Independent training seeds | Runs |
-|---|---:|---|---:|
-| Walker Walk pixels | 5 | 0, 1, 2 | 3 |
-| Walker Walk pixels | 15 | 0, 1, 2 | 3 |
-| Walker Walk pixels | 30 | 0, 1, 2 | 3 |
-| Cartpole Swingup pixels | 15 | 0, 1, 2 | 3 |
-| **Total main experiment** | | | **12** |
-
-The Walker H=15 runs serve both as reproduction results and as the middle horizon condition. Cartpole demonstrates a second task under the shared learning settings; it is not a transfer experiment. Pilots, random-policy evaluation, and reference-implementation runs are outside this 12-run count.
-
-### B. Controls
-
-- Change only imagination horizon across Walker conditions. Hold model capacity, replay capacity, sequence length, batch size, number of imagination starts, optimizer settings, environment budget, and update schedule fixed.
-- Use the same training seed labels across conditions, while recognizing that policies and collected trajectories will diverge. Give components separate RNG streams where practical so extra imagined steps do not directly consume the environment's random stream.
-- Keep actor/critic reductions normalized consistently across horizons. Record the effective weighted sample counts so a longer horizon does not inadvertently multiply the loss scale.
-- Longer rollouts inherently add imagined transitions and compute. This is an equal-real-data comparison, not an equal-compute comparison. Report cumulative imagined transitions and actual runtime.
-- Rotate run order across conditions where practical. Record interruptions, failures, and reruns. If a code fix affects results, rerun every affected condition on the corrected version.
-- Freeze a common diagnostic corpus after M9, using separate episodes collected by random and development policies. Exclude it from training. Evaluate every final model on the same contexts and recorded actions.
-- Do not run a “without imagination” condition that removes the actor's learning mechanism. H=5 is a short-horizon comparison, not a model-free baseline.
-
-### C. Metrics and evaluation
-
-| Question | Required evidence |
-|---|---|
-| Does the agent learn? | Return versus training control steps; final-checkpoint return on 20 evaluation episodes per training seed |
-| How efficiently does it use real data? | Area under the evaluation learning curve over the fixed training budget; any threshold-based metric defined before final runs |
-| What does horizon change? | Per-seed final return and learning-curve area for H=5,15,30 |
-| How far does prediction remain useful? | Reward MAE versus prediction distance on the common diagnostic corpus; secondary image/continuation diagnostics |
-| What does it cost? | Return versus elapsed training time; total elapsed time including evaluation; peak VRAM; update time; cumulative imagined transitions |
-| How stable are results? | All individual training-seed results, mean, standard deviation, and failures |
-
-Use a reserved final evaluation seed set and the fixed final checkpoint. Do not choose the best checkpoint from final evaluation returns. Aggregate episodes within each training seed before aggregating across training seeds. Three training seeds give limited evidence about variability; additional evaluation episodes do not create additional independent training runs.
-
-Refresh on-policy prediction diagnostics separately if useful, but keep them distinct from the common-corpus comparison because the data distributions differ. Associate prediction error with control performance descriptively. A correlation does not establish that prediction error alone caused a return difference.
-
-### D. Reference comparison and interpretation
-
-Use the random policy as a basic floor. Where resources permit, add three seeds of the pinned author implementation with matched wrappers, observation access, data budget, and closely matched capacity. Record residual differences. Published results with larger models or different training settings provide context only.
-
-The main study can establish how the reduced implementation behaves across horizons. It cannot establish superiority to model-free RL without an appropriate baseline, and it cannot isolate a pure horizon effect at fixed compute because longer horizons require more computation.
-
-Possible findings include improvement with longer horizons, a plateau, a decline, or no clear difference at this sample size. Report the observed outcome. If H=30 performs worse, investigate prediction error and optimization behavior before attributing the result to model exploitation. A null result with clear measurement and limitations remains a valid outcome.
-
-**Validation gate:** All planned runs have complete results or documented failure outcomes; figures regenerate from raw logs; comparisons preserve the frozen settings; and each conclusion is limited to the evidence collected.
-
-**Deliverable:** Final experiment report, aggregate tables, per-seed curves, prediction diagnostics, resource measurements, and representative behavior videos.
-
-## Final project package and resume evidence
-
-The completed repository should include:
-
-- Independent implementation with attribution for consulted or reused code.
-- Pinned dependencies, configurations, and commands for development checks, training, evaluation, and figure generation.
-- A short architecture explanation and a deviation table linking the reduced implementation to the selected sources.
-- Raw per-run logs, the experiment manifest, compact result tables, and representative checkpoints.
-- Three central figures: learning versus real data, learning versus time, and prediction error versus horizon.
-- Videos showing real policy behavior and paired open-loop predictions, with the selection rule stated.
-- A concise discussion of one diagnosed implementation failure, its evidence, and its resolution.
-
-The eventual resume entry should draw from two completed outcomes: **demonstrated visual-control learning at a measured scale** and **a measured horizon–performance–compute result**. Record actual task returns, data budgets, parameter counts, runtime, and variability before writing accomplishment claims. Strong implementation and a careful experiment are sufficient; architectural novelty is not a requirement.
-
-The immediate implementation task is **M0**, followed by the environment/replay contract in **M1**. Additional architectures, simulators, task suites, or kernel optimization are outside this plan unless the completed experiment exposes a concrete need.
