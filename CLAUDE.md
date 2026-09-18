@@ -20,11 +20,12 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 
 | Doc | When to read it |
 |---|---|
-| [docs/spec.md](docs/spec.md) | **Before writing any model code**, and whenever the paper and the reference implementation appear to disagree. The M0 frozen specification: pinned sources, paper-to-code mapping, preserved V3 methods, loss reductions, deviation table. **Currently a skeleton — M0 is not complete.** |
+| [docs/spec.md](docs/spec.md) | **Before writing any model code**, and whenever the paper and the reference implementation appear to disagree. The M0 specification, now complete: pinned sources §1, version manifest §2, paper→code→project mapping §3, exact architecture §4, objectives and gradient routing §5, resolved ambiguities §6, environment and counters §7, seeds §8, deviations §9, deferred measurements §10. |
 | [docs/milestones.md](docs/milestones.md) | When starting or closing any milestone M0–M9. Purpose, implementation scope, validation gate, and deliverable for each. |
 | [docs/config.md](docs/config.md) | Before changing any hyperparameter or quoting a setting. Initial values with their qualification rules. **Not frozen** until the end of M9. |
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
+| [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
 
 The original `dreamerv3_implementation_plan.md` was split into the four docs above; it is preserved
 unmodified at commit `da9a55a` and no longer exists in the tree, so there is one copy of each claim.
@@ -47,16 +48,24 @@ obs_t (64×64×3 uint8), a_{t-1}
 1. **Encoder.** CNN, 64×64×3 → `e_t`. Exact layers, activations, normalization, and **measured**
    parameter count are M0 deliverables.
 2. **Recurrence.** `h_t = f(h_{t-1}, z_{t-1}, a_{t-1})`, 512 deterministic features, reset at episode
-   boundaries. Single-step and sequence interfaces must agree on identical inputs.
+   boundaries (to literal zeros, not a learned state). **The cell is a block-diagonal GRU with 8
+   blocks, not a dense GRU(512)** — the only learned cross-block path is a dense 512→64 bottleneck
+   broadcast to every block. Connectivity, gate extraction, and the fan-in trap: [spec.md §4.1](docs/spec.md).
+   Single-step and sequence interfaces must agree on identical inputs.
 3. **Posterior / prior.** 32 categorical variables × 4 classes, straight-through sampling, uniform
    mixing. The posterior sees `(h_t, e_t)`; **the prior-only API takes no image argument** — this is
    structural, not a calling convention.
 4. **Model state.** `s_t = concat(h_t, z_t)`. Every head, the actor, and the critic consume this.
-5. **Heads.** Image reconstruction, reward, continuation. Reward uses the transformed distributional
-   output chosen in M0; target encoding and scalar decoding are tested independently of each other.
-6. **World-model loss.** Reconstruction + reward + continuation + separately weighted dynamics KL and
-   representation KL with free bits. **Reduction order is load-bearing:** sum categorical KL over the
-   32 factors *before* the free-nats threshold, then reduce over valid batch/time positions.
+5. **Heads.** Image reconstruction, reward, continuation. Reward and critic use `symexp_twohot`:
+   255 exponentially spaced bins over ±4.85e8, **no symlog on the target**, and a **mirror-pair
+   readout** whose summation order is part of the contract ([spec.md §5.5](docs/spec.md)). Target
+   encoding and scalar decoding are tested independently of each other.
+6. **World-model loss.** Reconstruction + reward + continuation + separately weighted dynamics KL
+   (1.0) and representation KL (0.1) with free bits. **Reduction order is load-bearing:** sum
+   categorical KL over the 32 factors *before* the free-nats threshold, then reduce over valid
+   batch/time positions. **Free bits = 1 nat for the whole latent (≈0.031/factor), not 1 per
+   factor.** Reconstruction is summed over pixels and meaned over positions, so `rec: 1.0` is ~1e4
+   against `rew: 1.0` — deliberate; do not "fix" it to a pixel mean.
 7. **Transition convention.**
    `(observation_t, action_t, reward_{t+1}, observation_{t+1}, episode_boundary, environment_discount)`.
    Reward and continuation targets accompanying `observation_{t+1}` are supervised from the resulting
@@ -67,12 +76,23 @@ obs_t (64×64×3 uint8), a_{t-1}
    starts; then `H` prior-only steps returning `H` actions/rewards/continuations and `H+1` latent
    states. No decoder in this path, no simulator step, no future observation. Decode only for
    inspection.
-10. **Critic.** Distributional, bootstrapped λ-returns (γ=0.997, λ=0.95), slow-critic regularization,
-    v2 replay critic objective preserved — or its omission classified as a deviation in `docs/spec.md`.
-11. **Actor.** Bounded continuous policy trained by the **V3** policy-gradient estimator specifically,
-    with return normalization, entropy regularization, and continuation weighting. Do not substitute
-    an earlier Dreamer variant's gradient rule. Any action transform carries its density correction.
-12. **Online loop.** During real interaction, update the posterior from the current image **before**
+10. **Critic.** Distributional, bootstrapped λ-returns (λ=0.95) with the bootstrap at **`v[t+1]`**
+    (v2's paper equation prints `v_t`; that is a typo — [spec.md §6.1](docs/spec.md)). The imagined
+    path bootstraps the **fast** critic; the slow critic is a regularizer only, never a target. The
+    **replay critic is included** at weight 0.3 and bootstraps the *imagined* return.
+11. **Actor.** **REINFORCE** with a critic baseline — v1's pathwise rule for continuous actions is a
+    *different objective* and must not be substituted. Return normalization (5th/95th percentile,
+    clamp at 1), continuation weighting, and entropy **subtracted** in the minimized loss at
+    η=3e-4. The distribution is a diagonal Gaussian with `tanh` on the **mean only**; the sample is
+    unsquashed, so **there is no density correction to apply** ([spec.md §4.6](docs/spec.md)).
+12. **Discount lives in the continuation head.** `contdisc`: the head is trained on the soft label
+    `(1−is_terminal)·(1−1/333)` and the return discount is then **1**. Applying γ explicitly *as
+    well* double-counts it; using a hard 0/1 label with `disc=1` drops it. Both train silently
+    ([spec.md §5.4](docs/spec.md)).
+13. **Gradient routing.** Actor gradients through imagined dynamics are **blocked** (which is *why*
+    REINFORCE is needed); replay-critic gradients into the encoder and RSSM are **live**. Full table:
+    [spec.md §5.9](docs/spec.md).
+14. **Online loop.** During real interaction, update the posterior from the current image **before**
     selecting an action. The environment policy uses the learned latent state directly; imagination
     supplies training experience only.
 
@@ -141,7 +161,9 @@ model? No directional prediction is made. Improvement, plateau, decline, and no 
 n=3 are all reportable outcomes; a null result with clear measurement and stated limitations is a
 valid deliverable. Stating a direction now would only create pressure to find it.
 
-**What it cannot claim.** Absolute returns, parameter counts, and runtime: **TBD — no run exists.**
+**What it cannot claim.** Absolute returns and runtime: **TBD — no run exists.** The parameter count
+is **derived** at ~0.69M from the specification ([results/m0/](results/m0/)) but **not measured**;
+`sum(p.numel())` over real modules is owed at M3–M4.
 Structurally, two tasks do not establish the paper's cross-domain result. Three training seeds give
 limited evidence about variability, and additional evaluation episodes do not create additional
 independent training runs. The horizon comparison holds **real data** fixed, not compute — longer
@@ -192,6 +214,14 @@ training settings are context only, never the comparison.
     prediction. Assert **structurally** that no observation tensor can reach the prior path.
   - Latent sampling is stochastic: average metrics over multiple latent samples per context rather
     than selecting attractive rollouts, and fix the seed before comparing conditions.
+  - **Block-GRU gate extraction:** the 1536-wide projection must be reshaped to `(B, 8, 192)`
+    *before* splitting into three gates. A flat `split(x, 3, -1)` gives a silently wrong, still
+    trainable model. Assert the index map, not just the shapes.
+  - **`symexp_twohot` readout at init:** with zero-init output weights the softmax is uniform and the
+    readout must be **exactly 0**. A naive float32 sum over ±4.85e8 bins returns −1.0 instead. Assert
+    the value is 0, not that it is small.
+  - **Encoder scales `x/255 − 0.5`; the decoder target is `x/255` with no shift.** The asymmetry is
+    real. A test that only checks output range passes either way.
 - Ask: "Would a senior engineer approve this?"
 - Before quoting a committed number, check the tree still reproduces it
 
@@ -241,48 +271,63 @@ code already says creates drift.
 
 ## Current Focus
 
-**M0 — freeze the algorithm specification.** 0 tests, 0 artifacts, no code. The project statement,
-The System, the constraints, and the Core Hypothesis are now real and sourced from the plan; the cost
-model remains `TBD` because nothing has been profiled.
+**M1 — environment interface and sequence replay.** M0 closed 2026-09-17; the specification in
+[docs/spec.md](docs/spec.md) is implementation-ready. 0 tests, 0 model code, **nothing measured**.
 
-Next: fill [docs/spec.md](docs/spec.md) — pin a `danijar/dreamerv3` commit SHA, record the dependency
-and simulator version manifest, write the paper-to-code mapping with an interpretation note on every
-row where the paper and the reference code differ, decide the v2 replay critic objective
-include-or-deviate question, and label every capacity reduction in the deviation table.
+**Two blocking checks come first**, because neither dependency is installed and the GPU is Blackwell
+(`sm_120`, compute capability 12.0):
 
-**No model code before `docs/spec.md` is complete.** M1 (environment interface and sequence replay)
-is the first milestone that writes implementation, and it depends on M0's transition convention and
-step-counter definitions. The layout is the cheapest thing to get right later and the most expensive
-thing to have chosen for the wrong problem.
+1. A PyTorch build carrying `sm_120` kernels — record `torch.cuda.get_arch_list()` and the exact wheel.
+2. `dm_control` + MuJoCo rendering headless under EGL on Python 3.13.
+
+Then M1 proper: pixel rendering, the transition record, sequence replay, and the `is_last` vs
+`is_terminal` contract — all **specified** in [spec.md §7](docs/spec.md), so M1 implements and
+validates rather than decides. Record the random-policy return floor and environment throughput under
+[results/README.md](results/README.md)'s rules.
+
+`Why It Is a Target` in this file stays `TBD` by construction: nothing has been profiled.
 
 ## Last Session
 
-**Session 2 — populate the hub and version the project.** 2 commits.
+**Session 3 — closed M0.** 3 commits.
 
-- **Ingested `dreamerv3_implementation_plan.md` and filled the four banner sections** (statement, The
-  System, Target Regime, Core Hypothesis) from it; removed the unpopulated-project banner.
-- **Split the plan into `docs/` with no duplicated content** — M0–M9 to `milestones.md`, M10 and the
-  final package to `experiment.md`, the scope table to `config.md` — and added the doc map. Wrote
-  `docs/spec.md` as an M0 skeleton (all `TBD`) and `results/README.md` for the measurement
-  convention. The original file is preserved at `da9a55a` and removed from the tree so each claim
-  has exactly one copy.
-- **Recorded the domain testing hazards** under Verification Before Done. All five are derived from
-  the plan's own validation gates, not invented.
-- **Still nothing measured.** Why It Is a Target, the parameter count, and every return remain `TBD`
-  by construction, not by omission.
+- **Pinned the reference at `e3f02248693a79dc8b0ebd62c93683888ddaccfe`** after finding the repository
+  has two disjoint eras matching the two paper versions: a wholesale rewrite landed two days before
+  arXiv v2 was posted, and `size1m` was added later still (2024-12-07). A paper-contemporaneous pin
+  would have specified a different model and could not cite the preset this project scales from.
+- **Resolved the three ambiguities the PDFs could not settle**, each by code trace with line-anchored
+  permalinks: the λ-return bootstraps at `v[t+1]` (v2's `v_t` is a typo); entropy is *subtracted* in
+  the minimized actor loss; replay-critic gradients **do** reach the encoder and RSSM, which is why
+  v1's "without sharing gradients" sentence was deleted.
+- **Wrote the full architecture and objective spec**, including the block-diagonal cell's real
+  connectivity, the `contdisc` discount location, the `bounded_normal` policy (no density correction
+  needed), LaProp, and a gradient-routing table separating the blocked actor path from the live
+  replay-critic path.
+- **Two evidence artifacts under `results/m0/`.** The twohot check shows the v1/v2 estimator gap
+  (9.05 vs 50 on a case with true mean 50) and that a naive float32 readout returns −1.0 where 0 is
+  required; it states explicitly what is *not* established about unbiasedness. The parameter count is
+  **derived from the spec** at 686,846 and agreed to the digit with an independent enumeration.
+- **Still nothing measured and nothing implemented.** `sm_120` PyTorch, `dm_control` and MuJoCo are
+  all verified **absent**; every count, timing and return remains `unmeasured`.
 
 ## Known Issues
 
-- **`docs/spec.md` is a skeleton and M0 is not complete.** Every entry is `TBD`. Writing model code
-  against it now would resolve open questions by accident — which is exactly the failure M0 exists
-  to prevent.
-- **Do not call this implementation "1M parameters" from the `size1m` preset name.** The preset is a
-  scale reference; its current defaults and architecture are not equivalent to the pinned paper
-  version. Count the actual parameters and name the artifact the count came from.
-- **Every section marked `TBD` is an admission, not a placeholder to skip past.** A session that
-  fills one in from plausible-sounding assumption rather than measurement has made the file worse
-  than empty. Fill from artifacts or leave `TBD`.
-- **No results exist.** `results/` holds only its README. No number may be quoted from anywhere else.
+- **No dependency needed to run anything is installed.** `torch`, `dm_control` and `mujoco` all fail
+  to import. The GPU is **Blackwell, compute capability 12.0 (`sm_120`)**, so PyTorch must carry
+  `sm_120` kernels (CUDA 12.8+); Python is 3.13.13, which `dm_control` may not support. This pair is
+  the largest unvalidated risk in the project and it **blocks M1**.
+- **`size1m` is ~0.69M parameters by derivation, not 1M, and the figure is not measured.** It is also
+  below the paper's smallest evaluated row (12M), so no result can be compared to a published number.
+  The measured count is owed at M3–M4 from `sum(p.numel())`.
+- **Specification is not implementation.** [spec.md §11](docs/spec.md) tracks `specified` /
+  `implemented` / `validated` separately. Everything is `specified`; nothing is the other two. Do not
+  read a completed spec section as working code.
+- **Four transcription traps are documented but unguarded** until tests exist: the block-GRU gate
+  split, the `BlockLinear` fan-in (2.83× init error if done per-block), the reference's inverted
+  `sg(…, skip=)` polarity, and the encoder/decoder image-scaling asymmetry. All are in
+  [spec.md](docs/spec.md) and in the hazards list above.
+- **No results exist beyond `results/m0/`**, which contains derivations and numerical checks only —
+  no measurement of any model. No number may be quoted from anywhere else.
 
 ---
 

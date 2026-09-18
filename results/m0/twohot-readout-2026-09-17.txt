@@ -37,10 +37,10 @@ The bins are symmetric, so a symmetric p must read out exactly 0. Zero-init of t
 twohot output weights is what makes predictions start at 0; naive accumulation can
 break that guarantee. Cases below all have true readout 0.
 
-case                          fsum f64         seq f32      np.sum f32     split f32
-uniform 1/255                        0            0.25              -1             0
-spike + tail 1e-04                   0     -0.03515625               0             0
-spike + tail 1e-06                   0               0  -0.00024414062             0
+case                   fsum f64       seq f32     np.sum f32   halves f32   mirror f32
+uniform 1/255                 0          0.25             -1            0            0
+spike + tail 1e-04            0   -0.03515625              0            0            0
+spike + tail 1e-06            0             0 -0.00024414062            0            0
 
 Extreme bin magnitude is 4.852e+08. Terms of that size cancel between the
 symmetric tails; in float32 an O(1e8) partial sum has an ulp near 32, so anything
@@ -49,8 +49,14 @@ residue instead of 0. The residue is an ABSOLUTE error floor, not a relative one
 so it matters most where the true value is near zero - i.e. at initialisation.
 
 Note which reductions fail: sequential and pairwise (np.sum) break on DIFFERENT
-cases above. A framework's default reduction is not a safeguard. Summing each
-signed half from small |b| to large was exact on every case tested here.
+cases above. A framework's default reduction is not a safeguard.
+
+`halves` sums each signed half from small |b| to large. `mirror` is the
+reference algorithm (outs.py TwoHot.pred at the pinned commit): reverse the
+negative-half products onto the positive-half products and add ELEMENTWISE, so
+each mirror pair cancels in one operation, then sum. Implement `mirror` - it is
+exact by construction for symmetric p rather than exact by luck of ordering,
+and it is what the reference does.
 
 ## 4. What this does NOT establish
 
