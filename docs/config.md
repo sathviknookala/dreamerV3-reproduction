@@ -7,6 +7,12 @@
 rule. Final settings are frozen at the end of M9, before final seeds run. When that happens, replace
 this banner with the freeze date and the run manifest path.
 
+**Architecture is no longer a starting choice.** M0 closed on 2026-09-17: the exact layers,
+activations, normalization, initialization and distributions are specified in
+[spec.md §4](spec.md), and the objectives and gradient routing in [spec.md §5](spec.md). This file
+governs the *empirical* settings below — capacity, ratios, budgets — which M9 still qualifies.
+Where the two touch, spec.md is authoritative and this file records the qualification rule.
+
 ---
 
 ## Scope and initial configuration
@@ -30,6 +36,70 @@ The values below are starting choices to qualify during development. Hardware fi
 | Initial random collection | 5,000 agent transitions | Preserve the same warm-up budget in final comparisons |
 | Planning budgets | Walker: 1M control steps/run; Cartpole: 500K/run | Qualify cost and learning in M9; all Walker horizon conditions receive the same final budget |
 
-The [author-maintained configuration](https://github.com/danijar/dreamerv3/blob/main/dreamerv3/configs.yaml) supplies a useful compact scale reference through `size1m`, including deterministic size 512 and four classes. Its current defaults and architecture are not automatically equivalent to the pinned paper version. Record the actual parameter count rather than calling this implementation “1M parameters” from the preset name.
+The [author-maintained configuration](https://github.com/danijar/dreamerv3/blob/e3f02248693a79dc8b0ebd62c93683888ddaccfe/dreamerv3/configs.yaml) supplies a useful compact scale reference through `size1m`, including deterministic size 512 and four classes. Its current defaults and architecture are not automatically equivalent to the pinned paper version. Record the actual parameter count rather than calling this implementation “1M parameters” from the preset name.
 
 The initial update ratio and budgets are project choices, not claims about the paper's settings or guaranteed convergence. Runtime is estimated from measured pilots. If the compact system needs more capacity or updates, resolve that before the final study and apply the resulting configuration consistently.
+
+
+---
+
+## Reconciliation against the pinned reference (M0, 2026-09-17)
+
+The link above was a `blob/main/` reference and has been repointed at the pinned commit
+`e3f02248693a79dc8b0ebd62c93683888ddaccfe`. `main` moves; the SHA does not. Per
+[spec.md §1](spec.md), no `blob/main/...` reference may be added to this repository.
+
+Four corrections to how the table above should be read. None changes a starting value; all change
+what the value is being compared against.
+
+### `size1m` alone does not define the run
+
+**`dmc_vision` does not inherit a size preset** at the pinned commit — `dmc_proprio` merges `size1m`,
+`dmc_vision` does not. The reference configuration this project scales from is
+`--configs dmc_vision size1m`, both presets. Bare `dmc_vision` is the ~200M-equivalent model.
+`size1m` itself is three regex patterns whose `.*\.units` clause rewrites **six** keys, not one.
+Resolved values: [spec.md §4.0](spec.md).
+
+### The 32 × 4 stochastic state is partly inherited, and the cell is not a plain GRU
+
+`size1m` sets `deter: 512`, `hidden: 64`, `classes: 4`. It does **not** set `stoch`, which is
+inherited as `32` — so "32 categorical variables, 4 classes each" is correct, but only one of those
+two numbers comes from the preset. It also inherits **`blocks: 8`**: the recurrent cell is a
+**block-diagonal GRU**, not a dense GRU(512). The row "Recurrent state — 512 deterministic features"
+above is therefore an incomplete description of the architecture; [spec.md §4.1](spec.md) is the
+contract.
+
+### Update ratio — units reconciled, and the gap is 4×
+
+The reference defines `train_ratio` as **replayed frames per environment step**
+(`embodied/run/train.py#L24-L25`, confirmed by its own tests). The plan's "replay training positions
+per collected transition" is the **same unit**, so the comparison is valid:
+
+| | Value | Env steps per gradient step (B=16, T=64) |
+|---|---:|---|
+| Pinned reference, `dmc_vision` | **256** | 4 |
+| This project, initial | **64** | 16 |
+
+The starting ratio is **4× below** the pinned reference for the same task. That is a deliberate
+resource restriction ([spec.md §9-9](spec.md)), and it is the most likely single explanation if
+learning underperforms at M9. The qualification rule in the table above stands; it now has a
+reference value to be qualified against.
+
+**Definitional caveat.** The reference counts *all* replayed frames including its context frame; this
+project counts **loss-bearing positions only**, because the burn-in prefix is recomputed rather than
+loss-bearing ([spec.md §7.5](spec.md)). State the convention whenever a realized ratio is quoted.
+
+### Replay capacity is expected to be inert, not merely reduced
+
+500,000 against the reference's 5,000,000. At a 1e6-step Walker budget the buffer holds the entire
+run before eviction begins, so the reduction is **hypothesised to have no effect** on these two
+tasks. The qualification rule is unchanged — measure occupancy at M9 — but it is now testing a stated
+hypothesis rather than an open question.
+
+### Parameter count
+
+**~0.69M derived from the specification, not measured** —
+[`results/m0/param-count-derived-2026-09-17.txt`](../results/m0/param-count-derived-2026-09-17.txt).
+Below the preset's name and far below the paper's smallest evaluated row of 12M. The measured count
+is deferred to M3–M4 ([spec.md §10-7](spec.md)) and must come from `sum(p.numel())` over
+instantiated modules.

@@ -8,6 +8,16 @@ Keep the dependency order. Complete the implementation and establish learning be
 final horizon study. **A milestone is complete when its validation evidence and reproducible
 configuration are recorded** — not when the code runs.
 
+## Status
+
+| Milestone | Status |
+|---|---|
+| **M0** | **CLOSED 2026-09-17.** Gate passed. Evidence: [spec.md](spec.md) and the audit at [`results/m0/m0-audit-2026-09-17.md`](../results/m0/m0-audit-2026-09-17.md). |
+| **M1** | **ACTIVE.** Next milestone. Two blocking environment checks first — see [spec.md §10-1 and §10-2](spec.md). |
+| M2–M10 | Not started. |
+
+Nothing is `implemented` and nothing is `validated` — see the status legend in [spec.md §11](spec.md).
+
 ---
 
 ## M0 — Freeze the algorithm specification and experiment contract
@@ -28,6 +38,14 @@ configuration are recorded** — not when the code runs.
 
 **Deliverable:** Configuration, source/version manifest, and paper-to-code checklist.
 
+> **CLOSED 2026-09-17.** Every bullet above is discharged in [spec.md](spec.md): pinned sources §1,
+> version manifest §2, paper-to-code mapping §3, exact architecture §4, preserved V3 methods §5.0,
+> loss reductions §5.2–§5.5, environment and counters §7, seeds §8, deviations §9.
+> **The replay critic is included, not omitted** (§5.7), so no deviation was needed for it.
+> Three paper-level ambiguities that the arXiv PDFs could not settle were resolved by tracing the
+> pinned code and are recorded with permalinks in §6. Requirement-by-requirement mapping:
+> [`results/m0/m0-audit-2026-09-17.md`](../results/m0/m0-audit-2026-09-17.md).
+
 ## M1 — Environment interface and sequence replay
 
 **Purpose:** Establish trustworthy temporal data before training a recurrent model.
@@ -36,9 +54,17 @@ configuration are recorded** — not when the code runs.
 
 `(observation_t, action_t, reward_{t+1}, observation_{t+1}, episode_boundary, environment_discount)`.
 
-Keep the last observation before a reset. Distinguish a true terminal event from a time-limit boundary. DMControl can end an episode with a nonzero discount, so `LAST` alone must not imply a zero continuation target. Reset recurrent state at episode boundaries while retaining the correct bootstrap semantics. [DMControl environment implementation](https://github.com/google-deepmind/dm_control/blob/main/dm_control/rl/control.py)
+Keep the last observation before a reset. Distinguish a true terminal event from a time-limit boundary. DMControl can end an episode with a nonzero discount, so `LAST` alone must not imply a zero continuation target. Reset recurrent state at episode boundaries while retaining the correct bootstrap semantics. [DMControl environment implementation](https://github.com/google-deepmind/dm_control/blob/3e9cd0bf3ec5141f3c6225e77f3ef99b42df2426/dm_control/rl/control.py)
 
 Initially sample contiguous within-episode sequences. Define how a sequence beginning mid-episode obtains recurrent context: use a preceding burn-in prefix with masked losses, or reproduce a documented reference replay-state strategy. Avoid treating an arbitrary mid-episode frame as a real environment reset.
+
+> **Decided at M0.** This choice is no longer open: **recomputed burn-in prefix, `P = 5`,
+> loss-masked** — [spec.md §7.5](spec.md), classified as an implementation choice in §9-8 with its
+> rationale and its ≈8% compute cost. The reference's alternative (latents persisted in the replay
+> buffer and restored via `replay_context: 1`) is documented there and deliberately not adopted.
+> The transition record, the `is_last` vs `is_terminal` contract, the action alignment, and all six
+> step counters are likewise fixed in [spec.md §7](spec.md); M1 implements and validates them rather
+> than deciding them.
 
 **Validation gate:** A deterministic toy trajectory detects one-step action/reward alignment errors. Replay preserves sequence order and boundaries. Time-limit and terminal examples produce the intended targets. Observation shapes, action limits, seed handling, and step counters pass checks. Record a random-policy return floor under the final reward convention.
 

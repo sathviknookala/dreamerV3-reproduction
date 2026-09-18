@@ -61,6 +61,18 @@ def read_v2_split(p, b, dtype=np.float32):
     return dtype(seq_sum(neg, dtype) + seq_sum(t[b == 0], dtype) + seq_sum(pos, dtype))
 
 
+def read_v2_mirror(p, b, dtype=np.float32):
+    # reference algorithm: reverse the negative half onto the positive half so
+    # each mirror pair cancels exactly, then sum
+    p, b = p.astype(dtype), b.astype(dtype)
+    n = len(b)
+    m = (n - 1) // 2
+    t1 = (p[:m] * b[:m])[::-1]
+    t2 = (p[m:m + 1] * b[m:m + 1])
+    t3 = (p[m + 1:] * b[m + 1:])
+    return dtype(t2.sum(dtype=dtype) + (t1 + t3).sum(dtype=dtype))
+
+
 b1, b2 = bins_v1(), bins_v2()
 out = []
 w = out.append
@@ -107,7 +119,8 @@ w("The bins are symmetric, so a symmetric p must read out exactly 0. Zero-init o
 w("twohot output weights is what makes predictions start at 0; naive accumulation can")
 w("break that guarantee. Cases below all have true readout 0.")
 w("")
-w(f"{'case':<26}{'fsum f64':>12}{'seq f32':>16}{'np.sum f32':>16}{'split f32':>14}")
+w(f"{'case':<20}{'fsum f64':>11}{'seq f32':>14}{'np.sum f32':>15}"
+  f"{'halves f32':>13}{'mirror f32':>13}")
 cases = [
     ("uniform 1/255", np.full(BINS, 1.0 / BINS)),
 ]
@@ -121,7 +134,8 @@ for name, p in cases:
     a = seq_sum(t.tolist())
     v = np.float32(t.astype(np.float32).sum(dtype=np.float32))
     sp = read_v2_split(p, b2)
-    w(f"{name:<26}{ref:>12.6g}{a:>16.8g}{v:>16.8g}{sp:>14.6g}")
+    mi = read_v2_mirror(p, b2)
+    w(f"{name:<20}{ref:>11.6g}{a:>14.8g}{v:>15.8g}{sp:>13.6g}{mi:>13.6g}")
 w("")
 w(f"Extreme bin magnitude is {abs(b2[0]):.3e}. Terms of that size cancel between the")
 w("symmetric tails; in float32 an O(1e8) partial sum has an ulp near 32, so anything")
@@ -130,8 +144,14 @@ w("residue instead of 0. The residue is an ABSOLUTE error floor, not a relative 
 w("so it matters most where the true value is near zero - i.e. at initialisation.")
 w("")
 w("Note which reductions fail: sequential and pairwise (np.sum) break on DIFFERENT")
-w("cases above. A framework's default reduction is not a safeguard. Summing each")
-w("signed half from small |b| to large was exact on every case tested here.")
+w("cases above. A framework's default reduction is not a safeguard.")
+w("")
+w("`halves` sums each signed half from small |b| to large. `mirror` is the")
+w("reference algorithm (outs.py TwoHot.pred at the pinned commit): reverse the")
+w("negative-half products onto the positive-half products and add ELEMENTWISE, so")
+w("each mirror pair cancels in one operation, then sum. Implement `mirror` - it is")
+w("exact by construction for symmetric p rather than exact by luck of ordering,")
+w("and it is what the reference does.")
 w("")
 w("## 4. What this does NOT establish")
 w("")

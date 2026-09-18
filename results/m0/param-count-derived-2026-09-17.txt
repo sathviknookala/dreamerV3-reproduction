@@ -1,0 +1,32 @@
+# Parameter count DERIVED FROM THE SPECIFICATION (not measured)
+# size1m + dmc_vision, walker_walk, action dim A=6
+#
+# This is arithmetic over the shapes recorded in docs/spec.md section 4.
+# It is NOT a measurement of instantiated modules. Deferred item 7 in
+# section 10 requires sum(p.numel()) over real modules at M3-M4; a
+# mismatch means the spec and the code disagree and one of them is wrong.
+
+module          params
+dyn            376,704
+enc             14,304
+dec             80,595
+rew             57,663
+con             41,153
+pol             50,316
+val             66,111
+----------------------
+TOTAL          686,846
+
+Excludes: the slowval EMA mirror (a byte-identical copy of val,
+          66,111 params, untrained), optimizer state, and retnorm scalars.
+Including the slow-critic mirror: 752,957
+
+largest tensors                          shape      params
+dyn/dynhid0/kernel                (8, 256, 64)     131,072
+dyn/dyngru/kernel                 (8, 64, 192)      98,304
+dyn/obs0/kernel                      (768, 64)      49,152
+rew/mlp/linear0/kernel               (640, 64)      40,960
+con/mlp/linear0/kernel               (640, 64)      40,960
+val/mlp/linear0/kernel               (640, 64)      40,960
+pol/mlp/linear0/kernel               (640, 64)      40,960
+dyn/dynin0/kernel                    (512, 64)      32,768
