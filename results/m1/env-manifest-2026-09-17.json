@@ -1,0 +1,54 @@
+{
+  "captured": "2026-09-17T22:00:52-04:00",
+  "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+  "cuda_toolkit_system": "V12.9.86",
+  "gpu": {
+    "compute_cap": "12.0",
+    "driver": "575.64.03",
+    "name": "NVIDIA RTX PRO 4000 Blackwell",
+    "vram_mib": "24467 MiB"
+  },
+  "os": {
+    "distro": "Ubuntu 22.04.5 LTS",
+    "kernel": "6.8.0-65-generic"
+  },
+  "packages": {
+    "absl-py": "2.5.0",
+    "dm-control": "1.0.46",
+    "dm-env": "1.6",
+    "dm-tree": "0.1.10",
+    "glfw": "2.10.2",
+    "labmaze": "1.0.6",
+    "lxml": "6.1.3",
+    "mujoco": "3.13.0",
+    "numpy": "2.5.3",
+    "protobuf": "7.36.2",
+    "pyopengl": "3.1.10",
+    "scipy": "1.18.1",
+    "torch": "2.13.0+cu129",
+    "triton": "3.7.1"
+  },
+  "pip_freeze_lines": 52,
+  "pip_freeze_sha256": "3790431efebf6f6b0452759d9ef675f75b9f8efee400bcdf58ba02c6f788517b",
+  "python": {
+    "executable": "/home/sathvik/dreamer/.venv/bin/python",
+    "implementation": "CPython",
+    "version": "3.12.11"
+  },
+  "ram_gib": 124,
+  "torch_runtime": {
+    "arch_list": [
+      "sm_75",
+      "sm_80",
+      "sm_86",
+      "sm_90",
+      "sm_100",
+      "sm_120"
+    ],
+    "bundled_cuda": "12.9",
+    "cuda_available": true,
+    "cudnn": 92000,
+    "device_capability": "sm_120",
+    "version": "2.13.0+cu129"
+  }
+}

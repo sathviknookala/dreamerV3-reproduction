@@ -2,5 +2,7 @@
 # The spec cites commit permalinks; a local partial copy only invites drift,
 # and vendoring third-party source here would need its own license and attribution.
 .ref/
+.venv/
+venv/
 __pycache__/
 *.pyc

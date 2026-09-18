@@ -1,0 +1,81 @@
+# M0 deferred item 1 — PyTorch compute compatibility
+# python 3.12.11  /home/sathvik/dreamer/.venv/bin/python
+
+## Build identity
+  torch            2.13.0+cu129
+  dist-info        torch-2.13.0+cu129
+  bundled CUDA     12.9
+  cuDNN            92000
+  arch list        sm_75 sm_80 sm_86 sm_90 sm_100 sm_120
+
+## Device visibility
+  [PASS] torch.cuda.is_available()
+  device           NVIDIA RTX PRO 4000 Blackwell
+  capability       sm_120 (compute 12.0)
+  total VRAM       23986 MiB
+
+## Architecture support — the Blackwell question
+  [PASS] sm_120 present in build arch list
+  [PASS] device capability matches a compiled arch — device is sm_120
+
+## Numerical agreement on the ops this project actually uses
+  [PASS] matmul 1024x1024 (max|GPU-CPU| = 1.221e-04 <= 1e-03) — shape (1024, 1024)
+  [PASS] encoder stage-0 conv2d 3->8 k5 p2 on 64x64 (max|GPU-CPU| = 1.192e-06 <= 1e-04) — shape (16, 8, 64, 64)
+  [PASS] BlockLinear einsum '...ki,kio->...ko' (8 x 256 -> 8 x 64) (max|GPU-CPU| = 1.907e-05 <= 1e-03) — shape (16, 8, 64)
+  [PASS] RMSNorm in float32 (eps inside rsqrt) (max|GPU-CPU| = 1.907e-06 <= 1e-05) — shape (16, 64, 512)
+  [PASS] block einsum == block-diagonal dense matmul (1.144e-05)
+
+## Autograd and optimizer step on device
+  [PASS] backward produces finite non-zero grad (norm 0.3089)
+  [PASS] optimizer step changes parameters (4.775e-05)
+
+## Precision modes available
+  [PASS] float32 matmul runs and is finite
+  [PASS] bfloat16 matmul runs and is finite
+  [PASS] float16 matmul runs and is finite
+
+## TF32 (reported, not a pass/fail — it changes fp32 precision)
+  max|GPU-CPU| with TF32 on   6.781e-02
+  max|GPU-CPU| with TF32 off  1.297e-04
+  Correctness tests above ran with TF32 OFF. Leave it off while
+  validating against hand-computed fixtures (M2, M7).
+
+## Shape feasibility at the specified batch
+  FLOORS, not measurements. Each excludes the rest of the model, the
+  optimizer state, and autograd activations it does not itself create.
+  Real peak VRAM at H=30 is deferred to M9 (spec.md section 10-8).
+
+  [PASS] encoder fwd+bwd on the full B*T=1024 image batch, peak 647 MiB — tokens (1024, 16, 4, 4)
+
+     H   imagined states   feat tensor MiB
+     5    (1024, 6, 640)              84.1
+    15   (1024, 16, 640)             108.1
+    30   (1024, 31, 640)             146.1
+  Imagination starts from EVERY replay position (imag_last=0 => K=T), so the
+  leading dimension is B*T=1024, not B. This is what drives H=30 memory.
+
+  free / total: 23581 / 23986 MiB
+
+## Verdict: 14/14 checks passed
+
+{
+  "torch": "2.13.0+cu129",
+  "wheel": "torch-2.13.0+cu129",
+  "cuda": "12.9",
+  "cudnn": 92000,
+  "arch_list": [
+    "sm_75",
+    "sm_80",
+    "sm_86",
+    "sm_90",
+    "sm_100",
+    "sm_120"
+  ],
+  "device": "NVIDIA RTX PRO 4000 Blackwell",
+  "capability": "sm_120",
+  "vram_mib": 23986,
+  "python": "3.12.11",
+  "checks_passed": 14,
+  "checks_total": 14,
+  "failed": []
+}
