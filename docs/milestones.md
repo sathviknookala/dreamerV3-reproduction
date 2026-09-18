@@ -70,6 +70,21 @@ Initially sample contiguous within-episode sequences. Define how a sequence begi
 
 **Deliverable:** Inspectable replay batches, a random-policy video, and initial environment throughput measurements.
 
+> **Status 2026-09-18: structurally complete — M2 may start.** `src/dreamer/{env,collector,replay,types}.py`
+> implement the §7 contracts; 13/13 unit tests cover alignment, boundaries, the time-limit vs
+> true-terminal targets, shapes, bounds, seeds, and counters, on top of the 40/40 environment checks
+> in [`results/m1/`](../results/m1/). `scripts/m1_replay_smoke.py` runs the whole path on a real
+> Walker episode and asserts the §7.5 sequence contract end to end (69 transitions / 70 observations,
+> 5 masked + 64 loss-bearing per sequence, 1024 `train_position` per gradient step, no cross-episode
+> window): 14/14 pass.
+>
+> **Deferred by decision, not blocked:** the random-policy return floor, the environment throughput
+> benchmark, and the random-policy video are *empirical reporting*, not interface correctness. They
+> are measurements of a fixed environment, reproducible at any time from the same code, and nothing
+> in M2–M8 consumes them — the floor is only read at M10. Running them now would spend the session's
+> remaining budget on numbers that would sit unused; they are scheduled with the M9 measurement pass.
+> `scripts/m1_random_floor.py` and `scripts/m1_throughput.py` are written and waiting.
+
 ## M2 — Deterministic recurrent transition
 
 **Purpose:** Implement the agent's memory and action-conditioned state update.
