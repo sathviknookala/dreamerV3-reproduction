@@ -128,7 +128,7 @@ Agents:          one trained separately per task — no shared weights, no trans
 Actions:         bounded continuous, task-specific dimension
 Deterministic:   512 features
 Stochastic:      32 categorical variables × 4 classes
-Sequences:       batch 16 × length 64 (burn-in prefix counted separately)
+Sequences:       B=16 × T=64 loss-bearing + P=5 burn-in → 69 transitions / 70 obs per sample
 Imagination:     H=15 default; Walker comparison at H ∈ {5, 15, 30}
 Discount:        γ=0.997, λ=0.95
 Collection:      1 environment, action repeat 1
@@ -216,7 +216,15 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- No model code and no unit tests exist yet. When a test command exists, record it here verbatim
+- Unit tests (13) and the M1 replay smoke test (14 checks on a real Walker episode), verbatim:
+
+  ```bash
+  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector
+  ```
+
+  ```bash
+  .venv/bin/python scripts/m1_replay_smoke.py
+  ```
 - A test that passes where the bug cannot occur is not a test — confirm it fails without its fix
 - **Domain testing hazards for this project** (each is a validation gate that a naive assertion
   passes while the bug survives):
@@ -292,45 +300,56 @@ code already says creates drift.
 
 ## Current Focus
 
-**M1 — environment interface and sequence replay.** M0 closed 2026-09-17. **The two blocking
-environment checks now pass: 40/40** across [results/m1/](results/m1/). The toolchain is no longer a
-risk; what remains is that **no model code exists**.
+**M2 — deterministic recurrent transition.** M0 closed 2026-09-17; **M1 is structurally complete as
+of 2026-09-18** and M2 may start. `src/dreamer/` implements the §7 environment, transition, collector
+and sequence-replay contracts; 40/40 environment checks, 13/13 unit tests, and 14/14 real-data replay
+smoke checks pass. What remains is that **no model code exists** — the RSSM, encoder, heads, actor
+and critic are all still only specified.
+
+The §7.5 sequence contract is now stated unambiguously and matches the implementation: `P = 5`
+burn-in transitions are **extra** context, `T = 64` is loss-bearing, so a sample is **69 transitions
+and 70 observations**, and `train_position = B × T = 1024` per gradient step. `B × (T − P)` was wrong
+wherever it appeared and no longer appears.
 
 Working environment: `.venv`, **Python 3.12.11**, torch **2.13.0+cu129** with `sm_120`, mujoco
 3.13.0, dm-control 1.0.46. Pins in [requirements.txt](requirements.txt).
 
 Next, in order:
 
-1. Pixel rendering and the environment wrapper against the contract in [spec.md §7](docs/spec.md) —
-   camera 0, uint8 HWC at 64×64, `is_terminal = discount == 0` and **never** `is_last`.
-2. The transition record and sequence replay, with the recomputed burn-in prefix `P = 5`.
-3. The M1 gate: a deterministic toy trajectory that catches one-step action/reward misalignment, plus
-   the time-limit and true-terminal target cases.
-4. Record the **random-policy return floor** (§10-5, 20 episodes/task) and environment throughput
-   (§10-6) under [results/README.md](results/README.md)'s rules.
+1. M2: the block-diagonal GRU with 8 blocks ([spec.md §4.1](docs/spec.md)) — single-step and sequence
+   interfaces, reset masks, layouts, initialization.
+2. The M2 gate: single-step vs sequence agreement on identical inputs, reset isolation across batch
+   elements, finite gradients. Set `allow_tf32 = False` in any test asserting against hand-computed
+   values.
+3. Guard the four documented transcription traps as the code that can hit them lands — the gate
+   split, the `BlockLinear` fan-in, `sg(…, skip=)` polarity, the image-scaling asymmetry.
+
+**Deferred from M1 by decision, not blocked:** random-policy return floor, throughput benchmark, and
+random-policy video. They measure a fixed environment, reproduce from committed code at any time, and
+nothing before M10 reads them; scripts are written and wait for the M9 measurement pass.
 
 `Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing of this project has been
 profiled.
 
 ## Last Session
 
-**Session 4 — built the environment and validated compute.** 1 commit.
+**Session 5 — closed M1: disambiguated the sequence contract and validated replay on real data.**
 
-- **Created `.venv` and validated the toolchain end to end: 40/40 checks.** `sm_120` is present in
-  torch 2.13.0+cu129's arch list and matches the device; matmul, the encoder conv, the
-  block-diagonal einsum and float32 RMSNorm all agree GPU-vs-CPU with TF32 off.
-- **Found and resolved a real blocker: Python 3.13 cannot run this project.** `dm-control` hard-depends
-  on `labmaze`, which ships no cp313 wheel and needs bazel from source. The M0 risk note had
-  predicted a 3.13 problem but named the wrong cause — `mujoco` and `dm-control` are both fine on
-  3.13. Rebuilt on 3.12.11 rather than using `--no-deps`, so `requirements.txt` reinstalls cleanly
-  and `pip check` passes.
-- **Confirmed the central M1 hazard against the real simulator**, not just from source: both tasks
-  end at step 1000 with `discount == 1.0` and **no step in either episode has `discount == 0`**. A
-  `1 − is_last` continuation target would zero the bootstrap on every episode of both tasks.
-- **Recorded verified env facts**: Walker 6-dim / Cartpole 1-dim actions in `[-1, 1]`; physics
-  substeps **10 vs 1** — they differ per task; ~920–1000 control steps/s including a 64×64 render.
-- **Measured that TF32 costs 500× precision** on this GPU and added it to the testing hazards, since
-  the M2 and M7 gates assert against hand-computed values.
+- **Fixed the `B × (T − P)` error in the spec.** Three places implied `T` was inclusive of the
+  burn-in, which would have made a "length 64" batch carry only 59 loss-bearing positions and
+  understated `train_position` by 8%. [spec.md §7.5](docs/spec.md) now carries an explicit contract
+  table; §7.6 and §7.7 were corrected to `B × T`. The implementation was already right
+  (`sequence_length = burn_in + train_length`), so this was documentation catching up to code.
+- **Ran the full collect→replay path on a real Walker episode: 14/14.** 1000 steps through `DMCEnv`,
+  `Collector`, `UniformRandomPolicy`, `ReplayBuffer`; one `B=16, P=5, T=64` sample verified for
+  `(16,70,64,64,3)` uint8 observations, `(16,69,6)` actions, `(16,69)` targets, exactly 5 masked and
+  64 loss-bearing positions per sequence, 1024 `train_position`, no cross-episode window, and finite
+  in-bounds values. `scripts/m1_replay_smoke.py`.
+- **Deliberately did not run the random-policy floor, throughput benchmark, or video.** They are
+  empirical reporting on a fixed environment with no downstream consumer before M10; deferred to the
+  M9 measurement pass rather than spent now. Recorded as a decision in
+  [milestones.md](docs/milestones.md), not as an omission.
+- **Recorded the test commands in this file** — they did not exist at last session's close.
 
 ## Known Issues
 
@@ -339,20 +358,24 @@ profiled.
   The system `python3` is 3.13.13, so a bare `python3 script.py` will fail on imports. Also: this
   machine's `python3.12` is uv-managed with a broken `ensurepip`, so `python -m venv` cannot create
   the environment — `uv venv --seed` does, and pip does the installs.
+- **`pytest` is not installed; the suite is `unittest` and needs `PYTHONPATH=src:tests`.** The package
+  is not installed into the venv, and `unittest discover` fails because `tests/` has no `__init__.py`
+  — name the three modules explicitly, as in the recorded command.
 - **torch must come from the `cu129` index, not PyPI.** The GPU is Blackwell `sm_120` and the driver
   is 575.64.03; CUDA 13.0 wheels need driver ≥ 580, so the newest PyPI default build is excluded.
 - **`size1m` is ~0.69M parameters by derivation, not 1M, and the figure is not measured.** It is also
   below the paper's smallest evaluated row (12M), so no result can be compared to a published number.
   The measured count is owed at M3–M4 from `sum(p.numel())`.
 - **Specification is not implementation.** [spec.md §11](docs/spec.md) tracks the three axes. The
-  *environment* is now `validated`; the *architecture* is only `specified`, and **nothing is
-  `implemented`**. A validated toolchain says the compiler works, not that the model exists.
-- **Four transcription traps are documented but unguarded** until tests exist: the block-GRU gate
-  split, the `BlockLinear` fan-in (2.83× init error if done per-block), the reference's inverted
-  `sg(…, skip=)` polarity, and the encoder/decoder image-scaling asymmetry.
+  *environment* is `validated` and the M1 data path is now `implemented`; the *architecture* is still
+  only `specified` and **no model code exists**.
+- **Four transcription traps are documented but unguarded** — the block-GRU gate split, the
+  `BlockLinear` fan-in (2.83× init error if done per-block), the reference's inverted `sg(…, skip=)`
+  polarity, and the encoder/decoder image-scaling asymmetry. None is reachable yet; each becomes
+  live with the M2–M4 code and must be guarded as it lands.
 - **No measurement of any model exists.** `results/m0/` holds derivations, `results/m1/` holds
   toolchain checks. No return, parameter count, VRAM figure or timing of this project's model exists
-  anywhere.
+  anywhere. The random-policy floor is also **not yet measured** — deferred, see Current Focus.
 
 ---
 

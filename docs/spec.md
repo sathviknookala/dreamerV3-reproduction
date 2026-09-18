@@ -1201,6 +1201,20 @@ choice (§9-8).** Prefix length `P = 5`, loss-masked. Rationale:
 
 Burn-in positions carry **no** loss of any kind and are excluded from every reduction denominator.
 
+**Sequence contract.** `P` and `T` are counted separately and never overlap:
+
+| Quantity | Value at `P = 5`, `T = 64` | Meaning |
+|---|---:|---|
+| `P` | 5 | burn-in transitions, extra context, loss-masked |
+| `T` | 64 | loss-bearing training transitions |
+| transitions per sample | `P + T` = **69** | actions, rewards, `is_last`, `is_terminal`, discounts |
+| observations per sample | `P + T + 1` = **70** | one leading observation plus one per transition |
+| `train_position` per sample | `T` = 64 | positions entering a loss denominator |
+| `train_position` per gradient step | `B × T` = **1024** at `B = 16` | loss-reduction denominator |
+
+`T` is **not** reduced by `P`: a batch is 69 transitions long so that 64 of them bear loss. Any
+expression of the form `B × (T − P)` is wrong and is not used anywhere in this project.
+
 ### 7.6 Step counters
 
 Five distinct counters. Conflating any two misstates the data budget.
@@ -1212,7 +1226,7 @@ Five distinct counters. Conflating any two misstates the data budget.
 | `physics_substep` | MuJoCo integrator steps inside one control timestep | Never a budget unit. Recorded once at M1 for the record. |
 | `replay_transition` | one stored transition record (§7.4); one per `agent_step` | Replay occupancy. |
 | `gradient_step` | one optimizer update | Compute accounting. |
-| `train_position` | one `(batch, time)` position that carries loss | Loss-reduction denominator. `B × (T − P)` per gradient step. |
+| `train_position` | one `(batch, time)` position that carries loss | Loss-reduction denominator. `B × T` per gradient step = 1024 at `B=16, T=64`; the `P=5` burn-in prefix is additional and excluded (§7.5). |
 
 **Verified on the installed simulator** ([`env-render-2026-09-17.txt`](../results/m1/env-render-2026-09-17.txt)):
 
@@ -1255,7 +1269,8 @@ M9 qualification.
 
 **Definitional caution:** the reference counts *all* replayed frames including the context frame
 (`batch_size * batch_length`). This project's `train_ratio` counts **loss-bearing positions only**,
-i.e. `B × (T − P)`, because the burn-in prefix is recomputed rather than loss-bearing. When quoting a
+i.e. `B × T` = 1024, excluding the `P = 5` burn-in prefix that each sample additionally carries
+(§7.5), because that prefix is recomputed rather than loss-bearing. When quoting a
 realized ratio, state which convention is used; §10 requires the realized ratio to be logged, not
 assumed.
 
