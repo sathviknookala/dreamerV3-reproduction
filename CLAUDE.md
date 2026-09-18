@@ -18,7 +18,13 @@ redirects work to the diagnosis it exposed, and the final experiment does not st
 
 - **Never add Claude as an author or co-author on commits or pushes.** The user is always the sole
   author — no `Co-Authored-By: Claude` trailer, no `Generated with Claude Code` line.
-- Default branch `main`. No remote configured yet; record it here when one exists.
+- Remote `origin` = `https://github.com/sathviknookala/dreamerV3-reproduction.git` (**HTTPS, not
+  SSH**). Default branch `main`, tracking `origin/main`.
+- **Push auth and commit authorship are different accounts on this machine.** The SSH key
+  (`~/.ssh/id_ed25519`) authenticates to GitHub as `NeuralNookala`, so the SSH remote is
+  deliberately not used. HTTPS goes through `credential.helper = store`. Commits are authored as
+  `sathviknookala@gmail.com` regardless — authorship is what appears in history; the credential
+  only decides who is permitted to push.
 - **Repo-local identity overrides the global one.** `~/.gitconfig` holds `sathviknookala@neuralads.ai`;
   this repo is set to `sathviknookala@gmail.com`. Verify with `git config user.email` inside the repo
   before any commit — a commit made outside the repo root, or in a worktree that did not inherit the
@@ -280,7 +286,8 @@ thing to have chosen for the wrong problem.
   the plan's own validation gates, not invented.
 - **`git init`**, default branch `main`, repo-local identity `sathviknookala@gmail.com` set to
   override the machine's global `@neuralads.ai`. Committed the pre-restructure state first so the
-  original plan is recoverable.
+  original plan is recoverable, then pushed `main` to the HTTPS remote — SSH was rejected as a
+  transport because that key authenticates as `NeuralNookala`.
 - **Still nothing measured.** Why It Is a Target, the parameter count, and every return remain `TBD`
   by construction, not by omission.
 
@@ -289,11 +296,12 @@ thing to have chosen for the wrong problem.
 - **`docs/spec.md` is a skeleton and M0 is not complete.** Every entry is `TBD`. Writing model code
   against it now would resolve open questions by accident — which is exactly the failure M0 exists
   to prevent.
-- **The global git identity is the wrong one for this repo.** `~/.gitconfig` has
-  `sathviknookala@neuralads.ai`; the override is repo-local only. Any worktree, submodule, or commit
-  made from outside this repo root will not inherit it. Check `git config user.email` before
-  committing. `user.name` is unset globally and was set locally to `Sathvik Nookala` — correct it if
-  that is not the intended attribution.
+- **Two GitHub identities are live on this machine and neither default is the right one.**
+  `~/.gitconfig` has `sathviknookala@neuralads.ai` and no `user.name`; the gmail override is
+  repo-local only, so any worktree, submodule, or commit made from outside this repo root will not
+  inherit it — check `git config user.email` before committing. `user.name` was set locally to
+  `Sathvik Nookala`; correct it if that is not the intended attribution. Separately, the SSH key
+  authenticates as `NeuralNookala`, so **do not switch `origin` to an SSH URL**.
 - **Do not call this implementation "1M parameters" from the `size1m` preset name.** The preset is a
   scale reference; its current defaults and architecture are not equivalent to the pinned paper
   version. Count the actual parameters and name the artifact the count came from.
