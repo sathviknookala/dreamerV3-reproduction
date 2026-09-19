@@ -30,10 +30,19 @@ Measured so far: environment and compute checks ([`m1/`](m1/)), the RSSM + encod
 evaluation on a held-out split ([`m5/`](m5/)) — 7500 gradient steps, 1624.9 s, peak 1489.5 MiB —
 the **per-horizon imagination cost** ([`m6/`](m6/)): 1024 rollouts at H = 5 / 15 / 30 cost
 3.8 / 10.6 / 20.9 ms and peak 204 / 463 / 858 MiB on an **untrained** model with **random** actions,
-which is a feasibility measurement, not the M9 steady-state profile; and the **critic's return
+which is a feasibility measurement, not the M9 steady-state profile; the **critic's return
 arithmetic and parameter count** ([`m7/`](m7/)): `val` measured at 66,111, the three readings of γ
 separated at 14.688751 / 14.386389 / 15.000000, and a critic fit from 0.0000 to 0.3907 against a
-fixed target mean of 0.4029.
-**No return figure for a trained agent exists**; the random-policy return floor and the environment
-throughput benchmark are still deferred to the M9 measurement pass, and the 32.1 mean return
-recorded in `m5/` is a property of the collected random-policy data, not that floor.
+fixed target mean of 0.4029; and the **actor's arithmetic and parameter count** ([`m8/`](m8/)):
+`pol` measured at 50,316, closing the trainable agent total at **686,846 measured** with every
+module of [spec.md §4.11](../docs/spec.md) now equal to its derived figure.
+
+**The parameter count is the only figure here that describes the finished agent.** Every other
+number was measured on an untrained or deliberately perturbed model: `m6/`, `m7/` and `m8/` all run
+at initialization, `m8/`'s update diagnostic uses synthetic `U(−1, 1)` returns rather than
+predictions, and `m5/`'s world model saw only uniform-random data.
+
+**No return figure for a trained agent exists**, and nothing has ever stepped the environment with
+a learned policy. The random-policy return floor and the environment throughput benchmark are still
+deferred to the M9 measurement pass, and the 32.1 mean return recorded in `m5/` is a property of the
+collected random-policy data, not that floor.

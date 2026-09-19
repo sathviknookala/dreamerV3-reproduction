@@ -23,6 +23,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/spec.md](docs/spec.md) | **Before writing any model code**, and whenever the paper and the reference implementation appear to disagree. The M0 specification, now complete: pinned sources §1, version manifest §2, paper→code→project mapping §3, exact architecture §4, objectives and gradient routing §5, resolved ambiguities §6, environment and counters §7, seeds §8, deviations §9, deferred measurements §10. |
 | [docs/milestones.md](docs/milestones.md) | When starting or closing any milestone M0–M9. Purpose, implementation scope, validation gate, and deliverable for each. |
 | [docs/config.md](docs/config.md) | Before changing any hyperparameter or quoting a setting. Initial values with their qualification rules. **Not frozen** until the end of M9. |
+| [docs/testing-hazards.md](docs/testing-hazards.md) | **Before writing any test or gate check**, and whenever a new assertion passes on the first try. The 20+ places where the obvious assertion passes while the bug survives, grouped by component. |
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
@@ -52,8 +53,8 @@ obs_t (64×64×3 uint8), a_{t-1}
   → a_t ~ π(a_t | s_t)
 ```
 
-1. **Encoder.** CNN, 64×64×3 → `e_t`. Exact layers, activations, normalization, and **measured**
-   parameter count are M0 deliverables.
+1. **Encoder.** CNN, 64×64×3 → `e_t`. Layers, activations and normalization are specified in
+   [spec.md §4.2](docs/spec.md); the parameter count is **measured** at 14,304 ([results/m2m3/](results/m2m3/)).
 2. **Recurrence.** `h_t = f(h_{t-1}, z_{t-1}, a_{t-1})`, 512 deterministic features, reset at episode
    boundaries (to literal zeros, not a learned state). **The cell is a block-diagonal GRU with 8
    blocks, not a dense GRU(512)** — the only learned cross-block path is a dense 512→64 bottleneck
@@ -88,10 +89,13 @@ obs_t (64×64×3 uint8), a_{t-1}
     path bootstraps the **fast** critic; the slow critic is a regularizer only, never a target. The
     **replay critic is included** at weight 0.3 and bootstraps the *imagined* return.
 11. **Actor.** **REINFORCE** with a critic baseline — v1's pathwise rule for continuous actions is a
-    *different objective* and must not be substituted. Return normalization (5th/95th percentile,
-    clamp at 1), continuation weighting, and entropy **subtracted** in the minimized loss at
-    η=3e-4. The distribution is a diagonal Gaussian with `tanh` on the **mean only**; the sample is
-    unsquashed, so **there is no density correction to apply** ([spec.md §4.6](docs/spec.md)).
+    *different objective* and must not be substituted. The baseline is the **fast** critic, the same
+    estimate the λ-return bootstraps (`slowtar: False`), read from one pre-update critic state.
+    Return normalization (5th/95th percentile, `S = max(1, hi−lo)`) is an **uncorrected** EMA at the
+    pin, so `S` sits at its floor of 1 early. Continuation weighting, and entropy **subtracted** in
+    the minimized loss at η=3e-4. The distribution is a diagonal Gaussian with `tanh` on the **mean
+    only**; the sample is unsquashed, so **there is no density correction to apply** — bounding is
+    the environment's and the RSSM's job ([spec.md §4.6, §5.6](docs/spec.md)).
 12. **Discount lives in the continuation head.** `contdisc`: the head is trained on the soft label
     `(1−is_terminal)·(1−1/333)` and the return discount is then **1**. Applying γ explicitly *as
     well* double-counts it; using a hard 0/1 label with `disc=1` drops it. Both train silently
@@ -99,9 +103,10 @@ obs_t (64×64×3 uint8), a_{t-1}
 13. **Gradient routing.** Actor gradients through imagined dynamics are **blocked** (which is *why*
     REINFORCE is needed); replay-critic gradients into the encoder and RSSM are **live**. Full table:
     [spec.md §5.9](docs/spec.md).
-14. **Online loop.** During real interaction, update the posterior from the current image **before**
-    selecting an action. The environment policy uses the learned latent state directly; imagination
-    supplies training experience only.
+14. **Online loop.** **The one part that does not exist yet — M9.** During real interaction, update
+    the posterior from the current image **before** selecting an action. The environment policy uses
+    the learned latent state directly and acts on the distribution's **mean** at evaluation
+    ([spec.md §7.8](docs/spec.md)); imagination supplies training experience only.
 
 Where a step is conventional but not required: the vector-observation path is a development aid for
 isolating control bugs and must stay separate from final pixel results. Image decoding is required
@@ -262,44 +267,18 @@ training settings are context only, never the comparison.
   .venv/bin/python scripts/m5_collect.py && .venv/bin/python scripts/m5_train.py && .venv/bin/python scripts/m5_eval.py --tag 2026-09-18 && .venv/bin/python scripts/m5_gate.py --report results/m5/openloop-2026-09-18.json
   ```
 - A test that passes where the bug cannot occur is not a test — confirm it fails without its fix
-- **Domain testing hazards for this project** (each is a validation gate that a naive assertion
-  passes while the bug survives):
-  - A `LAST → continue=0` assertion passes on Atari-style environments and is **wrong** on DMControl,
-    which ends episodes with a nonzero discount. Assert on the environment discount, not the
-    boundary flag, and include both a time-limit and a true-terminal example.
-  - **Falling reconstruction loss is not evidence of a working world model.** Assert on open-loop
-    reward MAE at prediction distance ≥ 5 against a training-set-mean predictor, not on pixel error.
-  - Single-step and sequence recurrence paths drift apart silently. Assert they agree on identical
-    inputs; a shape-only test will not catch it.
-  - Imagination accidentally calling the posterior leaks future observations and looks like excellent
-    prediction. Assert **structurally** that no observation tensor can reach the prior path.
-  - Latent sampling is stochastic: average metrics over multiple latent samples per context rather
-    than selecting attractive rollouts, and fix the seed before comparing conditions.
-  - **Block-GRU gate extraction:** the 1536-wide projection must be reshaped to `(B, 8, 192)`
-    *before* splitting into three gates. A flat `split(x, 3, -1)` gives a silently wrong, still
-    trainable model. Assert the index map, not just the shapes.
-  - **`symexp_twohot` readout at init:** with zero-init output weights the softmax is uniform and the
-    readout must be **exactly 0**. A naive float32 sum over ±4.85e8 bins returns −1.0 instead. Assert
-    the value is 0, not that it is small.
-  - **Encoder scales `x/255 − 0.5`; the decoder target is `x/255` with no shift.** The asymmetry is
-    real. A test that only checks output range passes either way.
-  - **The critic is invisible to testing at initialization, exactly as the reward head is.**
-    `val`'s `outscale: 0.0` makes the readout exactly 0 for every latent, so `∂L/∂feat` is exactly
-    zero and **every** §6.3 routing assertion is vacuous, and fast and slow critics are
-    indistinguishable. Perturb `value.mlp.out.weight` before asserting anything about the critic.
-  - **A structural no-observation check must test substrings, not a name set.** A
-    `future_observations` argument added to `imagine_trajectory` survived a check that compared
-    parameter names against `{"observation", "observations", "image", "embed"}`, because it equals
-    none of them. Assert that no parameter name *contains* `observ`/`image`/`frame`/`embed`.
-  - **A leaking open-loop rollout needs two different detectors.** An `open_loop_predict` that
-    accepts a `future_observations` argument is caught by the encoder tripwire and the signature
-    check but **not** by the frame-corruption check; a `gather_contexts` that slides one future frame
-    into the context window is caught **only** by the corruption check. Both are in the M5 gate, and
-    each was confirmed to pass the other's mutant.
-  - **TF32 breaks hand-computed fixtures.** Measured on this GPU: max|GPU−CPU| on a 2048² fp32
-    matmul is **6.8e-02 with TF32 on** and **1.3e-04 off** — a 500× difference. Set
-    `torch.backends.cuda.matmul.allow_tf32 = False` and `torch.backends.cudnn.allow_tf32 = False`
-    in any test asserting against analytic values (M2+M3, M7). `tests/test_rssm.py` sets both.
+- **Domain testing hazards live in [docs/testing-hazards.md](docs/testing-hazards.md)** — 20+ traps
+  where the obvious assertion passes while the bug survives, grouped by component. **Read it before
+  writing a test or gate check**, and whenever a new assertion passes on the first try. The two that
+  bite in almost every session:
+  - **`rew` and `val` are `outscale: 0.0`, so they are invisible at initialization.** The readout is
+    exactly 0 for every input and no gradient leaves the head. Perturb `mlp.out.weight` before
+    asserting anything about reward or value alignment, routing, or fast-vs-slow. `pol` at
+    `outscale: 0.01` is the exception and needs no perturbation — but a *rollout* still has a
+    zero advantage unless the other two are perturbed.
+  - **TF32 breaks hand-computed fixtures**: max|GPU−CPU| on a 2048² fp32 matmul is 6.8e-02 with it
+    on and 1.3e-04 off. Set `torch.backends.cuda.matmul.allow_tf32 = False` and
+    `torch.backends.cudnn.allow_tf32 = False` in any test asserting against analytic values.
 - Ask: "Would a senior engineer approve this?"
 - Before quoting a committed number, check the tree still reproduces it
 
@@ -334,15 +313,28 @@ training settings are context only, never the comparison.
 
 ## Code Style: Python / PyTorch
 
-No code exists yet, so there are no observed conventions to record — the code will be the style
-guide. Two rules are already forced by the spec and should hold from the first file:
+`src/dreamer/` is the style guide. The conventions the code actually holds to, recorded because a
+session that breaks one produces something that still trains:
 
-- **State the shape contract at every module boundary.** The M2+M3 gate tests shape, layout, and
-  reset semantics directly; an implicit `(B, T, ...)` vs `(T, B, ...)` convention is the most likely
-  source of a silent temporal misalignment.
-- **Every `detach()` / stop-gradient placement gets a one-line comment saying *why*.** The M4, M7,
-  and M8 gates all turn on gradient routing — prior vs posterior, critic targets, actor baselines —
-  and a missing or extra detach produces a model that trains without erroring.
+- **State the shape contract at every module boundary**, and **raise** on a violation rather than
+  broadcasting through it. `(B, T, ...)` vs `(T, B, ...)` is the most likely source of a silent
+  temporal misalignment, and `lambda_return`, `imagine_trajectory` and `imagined_actor_loss` all
+  reject mismatched inputs by hand.
+- **Every `detach()` / stop-gradient placement gets a one-line comment saying *why*.** M4, M7 and M8
+  all turn on gradient routing — prior vs posterior, critic targets, actor baselines — and a missing
+  or extra detach produces a model that trains without erroring.
+- **Assert an invariant that already holds by construction; do not re-enforce it.** `imagine_trajectory`
+  builds under `no_grad`, so the actor's blocked path needs no new detach — `imagined_actor_loss`
+  *raises* if handed features carrying a graph, and the gate asserts the grads are `None`.
+- **Losses reduce with a plain position `.mean()`** over the valid grid, never `sum/weight.sum()`.
+  Weights multiply, they do not normalize. This is what keeps the loss scale invariant to `H`.
+- **Modules take `in_features` / `action_dim` rather than reading a global config**, so a test can
+  instantiate a 12-feature toy version of anything. Every gate and unit test relies on this.
+- **Stateful non-parameters are `register_buffer`s on an `nn.Module`** (`bins`, the slow-critic
+  mirror, the `ReturnNormalizer` EMAs) so they enter `state_dict()` and survive checkpoint/resume,
+  which M9 requires.
+- **Each milestone owns `scripts/mN_gate.py` and `results/mN/`.** A gate prints one `PASS`/`FAIL` per
+  check and exits non-zero on any failure.
 
 Add further conventions here only when a session would otherwise get them wrong; duplicating what the
 code already says creates drift.
@@ -402,7 +394,9 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
   actions — the policy is deliberately unsquashed and `DMCEnv.step` plus the RSSM's `a/max(1,|a|)`
   enforce the range. "Entropy remains finite" is **not** "entropy stays positive": a Gaussian with
   `σ < 1/√(2πe)` has negative differential entropy, so the assertion is the closed-form
-  `minstd`/`maxstd` bounds.
+  `minstd`/`maxstd` bounds. Both are recorded in `milestones.md`, and the testing-hazard list — now
+  20+ entries — moved out of this file to [docs/testing-hazards.md](docs/testing-hazards.md), which
+  this file's own thinness rule required once it passed 50 lines.
 - **One mutant survived the first suite:** the sampled action left attached. Actions leave
   `imagine_trajectory`'s `no_grad` block already detached, so §5.6's `sg(act)` is invisible on that
   path. A test that hands the loss an imagination whose actions carry a graph was added until it failed.

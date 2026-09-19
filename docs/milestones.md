@@ -270,9 +270,12 @@ Use the random action provider from M6 for initial integration. Start with hand-
 
 **Deliverable:** Verified return calculations, critic training, and value-versus-target diagnostics.
 
-> **Status 2026-09-18: PASSED.** `tests/test_critic.py` 39/39 and `scripts/m7_gate.py` **37/37** on a
-> real Walker replay batch on the GPU — [`results/m7/gate-2026-09-18.txt`](../results/m7/gate-2026-09-18.txt).
-> Full record and limits: [`results/m7/README.md`](../results/m7/README.md).
+> **Status 2026-09-18: PASSED**, re-audited 2026-09-19. `tests/test_critic.py` **45/45** and
+> `scripts/m7_gate.py` **36/36** on a real Walker replay batch on the GPU —
+> [`results/m7/gate-2026-09-18.txt`](../results/m7/gate-2026-09-18.txt). The audit found no
+> behavioural defect but five surviving mutants; six tests and one guard wiring were added, and the
+> gate count corrected from the 37 originally recorded. Full record and limits:
+> [`results/m7/README.md`](../results/m7/README.md).
 >
 > **The return arithmetic is pinned to hand-computed values.** All six §6.1 fixtures hold, each
 > failing if the bootstrap moves to `v[t]`. The §5.4 γ-location trap is separated numerically:

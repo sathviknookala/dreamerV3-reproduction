@@ -30,6 +30,7 @@ The values below are starting choices to qualify during development. Hardware fi
 | Training sequences | Start with batch 16, length 64 | Treat any context/burn-in prefix separately from loss-bearing positions |
 | Imagination | H=15 transitions; H+1 latent states | Final Walker comparison uses H∈{5,15,30} |
 | Discount / return mixing | γ=0.997; λ=0.95 | Freeze after source reconciliation |
+| Behaviour objective | REINFORCE, fast-critic baseline, entropy η=3e-4; `retnorm` percentile EMA (5/95, rate 0.01, `S = max(1, hi−lo)`) | Implemented and validated at M8 ([spec.md §5.6](spec.md)). The EMAs are **uncorrected** at the pin, so `S` sits at its floor of 1 for the first few hundred updates and early advantages are effectively unnormalized — log the realized `S` during M9 and confirm it leaves the floor before freezing |
 | Collection | One environment first; action repeat 1 | Log native control steps separately from agent decisions and physics substeps |
 | Replay | CPU-resident uint8 frames; initial capacity 500,000 transitions | Measure total RAM use and avoid duplicate image storage |
 | Update ratio | Start with 64 replay training positions per collected transition | Log the exact definition and realized ratio; qualify learning before freezing |
