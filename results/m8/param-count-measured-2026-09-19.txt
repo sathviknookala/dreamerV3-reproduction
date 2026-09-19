@@ -1,0 +1,15 @@
+# MEASURED parameter count, instantiated PyTorch actor
+# walker_walk, A=6, size1m + dmc_vision; torch 2.13.0+cu129
+#
+module        measured   derived   delta
+pol              50316     50316       0
+
+world model       570419   (measured at M4)
+val                66111   (measured at M7)
+pol                50316   (measured here)
+agent total       686846   derived 686846, slowval mirror excluded
+
+# cartpole actor (A=1): 49666, which is 650 fewer -- 2 heads x 5 dims x (64 + 1)
+# every module in spec 4.11 is now MEASURED; nothing in that table is derived-only.
+
+PASS  pol and the agent total both equal the derivation

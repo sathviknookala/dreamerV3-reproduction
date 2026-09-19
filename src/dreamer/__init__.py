@@ -1,3 +1,14 @@
+from .actor import (
+    ACTENT,
+    Actor,
+    ActorActionProvider,
+    ActorOutput,
+    BehaviorOutput,
+    BoundedNormal,
+    ReturnNormalizer,
+    behavior_losses,
+    imagined_actor_loss,
+)
 from .collector import Collector, UniformRandomPolicy
 from .critic import (
     Critic,
@@ -67,7 +78,16 @@ from .viz import paired_filmstrip, write_png
 from .world_model import WorldModel, WorldModelOutput, batch_to_tensors
 
 __all__ = [
+    "ACTENT",
     "ActionProvider",
+    "Actor",
+    "ActorActionProvider",
+    "ActorOutput",
+    "BehaviorOutput",
+    "BoundedNormal",
+    "ReturnNormalizer",
+    "behavior_losses",
+    "imagined_actor_loss",
     "Critic",
     "CriticOutput",
     "SlowCritic",

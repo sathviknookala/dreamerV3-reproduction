@@ -18,14 +18,16 @@ configuration are recorded** — not when the code runs.
 | **M4** | **CLOSED 2026-09-18.** Gate passed: 11/11 unit tests, 15/15 real-batch GPU gate, fixed subset overfit, parameter count closes the derivation exactly. |
 | **M5** | **CLOSED 2026-09-18.** Gate passed 26/26 on a trained world model and a held-out split. Evidence: [`results/m5/`](../results/m5/). |
 | **M6** | **CLOSED 2026-09-18.** Gate passed 55/55 plus 29 unit tests. Evidence: [`results/m6/`](../results/m6/). |
-| **M7** | **CLOSED 2026-09-18.** Gate passed 37/37 plus 39 unit tests. Evidence: [`results/m7/`](../results/m7/). |
-| **M8** | **ACTIVE.** Next milestone. |
-| M9–M10 | Not started. |
+| **M7** | **CLOSED 2026-09-18.** Gate passed 36/36 plus 45 unit tests. Evidence: [`results/m7/`](../results/m7/). |
+| **M8** | **CLOSED 2026-09-19.** Gate passed 63/63 plus 38 unit tests; `pol` measured at 50,316 and the agent total at 686,846. Evidence: [`results/m8/`](../results/m8/). |
+| **M9** | **ACTIVE.** Next milestone. |
+| M10 | Not started. |
 
-The environment contract, the RSSM state-transition core, the full world-model objective, the
-imagination engine and the critic with its return targets are `implemented` and `validated`; the
-actor is the last component still only `specified` — see the status legend in
-[spec.md §11](spec.md).
+Every component of the agent — the environment contract, the RSSM state-transition core, the
+world-model objective, the imagination engine, the critic with its return targets, and now the actor
+with REINFORCE and return normalization — is `implemented` and `validated`. What does not exist is
+the **online loop** that alternates real collection with these updates, which is M9. See the status
+legend in [spec.md §11](spec.md).
 
 ---
 
@@ -276,8 +278,8 @@ Use the random action provider from M6 for initial integration. Start with hand-
 > failing if the bootstrap moves to `v[t]`. The §5.4 γ-location trap is separated numerically:
 > constant reward, λ=1, H=15 gives **correct 14.688751**, γ double-counted 14.386389, γ dropped
 > 15.000000 — three values from exact arithmetic, all three of which train without raising.
-> Measured `val` **66,111**, equal to the §4.11 derivation; world model + `val` = 636,530, with
-> `pol` 50,316 still derived and owed at M8.
+> Measured `val` **66,111**, equal to the §4.11 derivation; world model + `val` = 636,530, closing
+> at **686,846** once `pol` was measured at M8.
 >
 > **Critic fitting works from the real starting condition.** 300 LaProp steps on fixed discounted
 > real-reward targets (mean 0.4029): value **0.0000 → 0.3907**, MAE 0.4029 → 0.0538, world-model
@@ -305,6 +307,21 @@ Use the random action provider from M6 for initial integration. Start with hand-
 Check action log-probability and entropy calculations against the selected distribution. Define which latent features, sampled actions, returns, and baseline values are detached. If an action transform is used, handle its probability-density correction consistently.
 
 **Validation gate:** On a small analytic action/reward fixture, updates increase the probability of better actions. Actions stay in bounds, entropy remains finite, and an actor update changes only intended parameters. An increase in imagined return is treated as an integration diagnostic until real-environment performance improves.
+
+> **Two clauses of that gate needed clarifying at closure, both recorded in
+> [`results/m8/`](../results/m8/).** "Actions stay in bounds" means **executed** actions: the policy
+> is deliberately unsquashed (§4.6), so raw Gaussian samples leave `[-1, 1]` by design and the bound
+> is enforced by `DMCEnv.step`'s clip and by the RSSM's `a / max(1, |a|)`. "Entropy remains finite"
+> is not "entropy stays positive": the differential entropy of a Gaussian with `σ < 1/√(2πe)` is
+> **negative**, so the enforceable assertion is that entropy stays inside the closed-form bounds
+> implied by `minstd`/`maxstd`.
+
+**CLOSED 2026-09-19.** Gate 63/63 ([`gate-2026-09-19.txt`](../results/m8/gate-2026-09-19.txt)) plus
+38 unit tests in `tests/test_actor.py`; twelve mutants confirmed to fail. `pol` measured at
+**50,316** and the trainable agent total at **686,846**, discharging §10-7 entirely. `tarval`
+resolved against the pin as the **fast** critic for both bootstrap and baseline, and `retnorm`
+recorded as **uncorrected** (`debias: False` at `configs.yaml#L111`, overriding the class default).
+No return, no policy quality and no learning is claimed.
 
 **Deliverable:** Actor/critic training integrated with imagination, plus gradient-routing and policy diagnostics.
 

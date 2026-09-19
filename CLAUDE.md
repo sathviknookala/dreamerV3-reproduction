@@ -26,6 +26,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
+| [results/m8/](results/m8/) | Before quoting an entropy, a log-probability, a normalization scale or a parameter count, or touching the policy path. The M8 gate, the `tarval` and `debias` resolutions, and the REINFORCE direction check. |
 | [results/m7/](results/m7/) | Before quoting a value, a λ-return or a critic parameter count, or touching the return path. The M7 gate, the three readings of γ, and the value-vs-target fit. |
 | [results/m6/](results/m6/) | Before quoting an imagination cost or touching the rollout path. The M6 gate, the per-horizon cost/memory table, and what those numbers exclude. |
 | [results/m5/](results/m5/) | Before quoting an open-loop number, a training-run cost, or touching the prediction path. The M5 gate, the open-loop reward-MAE curve against both baselines, and the paired filmstrips. |
@@ -168,10 +169,10 @@ n=3 are all reportable outcomes; a null result with clear measurement and stated
 valid deliverable. Stating a direction now would only create pressure to find it.
 
 **What it cannot claim.** Absolute returns and runtime: **TBD — no run exists.** The parameter count
-is **derived** at ~0.69M from the specification ([results/m0/](results/m0/)); `sum(p.numel())` over
-the world model is **measured at 570,419** ([results/m4/](results/m4/)) and `val` at **66,111**
-([results/m7/](results/m7/)), each matching the derivation per module, for a measured 636,530. Only
-`pol` (50,316) is still derived; with it the total closes at 686,846. Owed at M8.
+is now **measured end to end**: `sum(p.numel())` over the world model is **570,419**
+([results/m4/](results/m4/)), `val` **66,111** ([results/m7/](results/m7/)) and `pol` **50,316**
+([results/m8/](results/m8/)), each equal to its §4.11 derivation, for a measured trainable total of
+**686,846** excluding the untrained `slowval` mirror.
 Structurally, two tasks do not establish the paper's cross-domain result. Three training seeds give
 limited evidence about variability, and additional evaluation episodes do not create additional
 independent training runs. The horizon comparison holds **real data** fixed, not compute — longer
@@ -223,11 +224,11 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (132), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
-  M5 gate (26), the M6 gate (55) and the M7 gate (36), verbatim:
+- Unit tests (170), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
+  M5 gate (26), the M6 gate (55), the M7 gate (36) and the M8 gate (63), verbatim:
 
   ```bash
-  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim test_imagine test_critic
+  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim test_imagine test_critic test_actor
   ```
 
   ```bash
@@ -248,6 +249,10 @@ training settings are context only, never the comparison.
 
   ```bash
   .venv/bin/python scripts/m7_gate.py
+  ```
+
+  ```bash
+  .venv/bin/python scripts/m8_gate.py
   ```
 
   The M5 gate needs the collected split and the trained checkpoint, neither of which is committed
@@ -344,28 +349,32 @@ code already says creates drift.
 
 ## Current Focus
 
-**M8 — actor and imagined behaviour learning.** M0 closed 2026-09-17; M1, the merged **M2+M3**,
-**M4**, **M5**, **M6** and **M7** all closed 2026-09-18. The world model predicts
-([results/m5/](results/m5/)), the imagination engine is validated ([results/m6/](results/m6/)), and
-the **critic and its return targets are now validated too** ([results/m7/](results/m7/)).
+**M9 — the complete online loop.** M0 closed 2026-09-17; M1, the merged **M2+M3**, **M4**, **M5**,
+**M6** and **M7** closed 2026-09-18; **M8 closed 2026-09-19** ([results/m8/](results/m8/)).
 
-What exists: the full world-model training path, `LaProp`, the episode-split dataset, the prior-only
-open-loop rollout, `imagine_trajectory`, and the critic — `ValueHead` (measured 66,111), the shared
-λ-return kernel with the bootstrap at `v[t+1]`, the slow-critic EMA regularizer, and both critic
-losses at weights 1.0 and 0.3. What does not: **the actor, and the online loop.**
+**Every component of the agent now exists and is gate-validated.** The world model predicts
+([results/m5/](results/m5/)), imagination is validated ([results/m6/](results/m6/)), the critic and
+its return targets are validated ([results/m7/](results/m7/)), and the actor — `bounded_normal`,
+REINFORCE, `ReturnNormalizer`, `ActorActionProvider`, `behavior_losses` — is validated too. `pol` is
+measured at 50,316, so the trainable agent total of **686,846** is measured and §10-7 is discharged.
+
+What does not exist: **the online loop.** Nothing has ever stepped the environment with a learned
+policy, and no return has ever been recorded.
 
 Next, in order:
 
-1. M8: `bounded_normal` (§4.6) — diagonal Gaussian, `tanh` on the **mean only**, sample unsquashed,
-   so **no density correction**. REINFORCE with the critic baseline, return normalization
-   (5th/95th percentile, clamp at 1), continuation weighting, entropy **subtracted** at η=3e-4.
-2. Assert the §6.2 fixtures: with η=0 one update raises `logπ` of the higher-advantage action; with
-   `Â=0` and η>0 one update **increases** entropy — the test that fails if the sign is flipped.
-3. Assert §5.9's blocked path: backward from `policy` alone gives **zero** grad on encoder, RSSM,
-   decoder, reward and continuation. `imagine_trajectory` already builds under `no_grad`, so this
-   should hold by construction — assert it rather than adding a detach.
-4. Measure `pol` `sum(p.numel())` against the derived 50,316, closing §10-7 entirely.
-5. Revisit the M5 diagnostics once online learning broadens the replay distribution.
+1. M9: alternate real collection, replay sampling, world-model updates and behaviour updates, with
+   the posterior updated from the current image **before** the action is selected. One optimizer over
+   `[dyn, enc, dec, rew, con, pol, val]`; `slowval` excluded and EMA-advanced **after** the step.
+2. Checkpoint model/optimizer state, the slow critic, the `ReturnNormalizer` buffers, RNG state,
+   replay state, config and step counters. Resume at an episode boundary.
+3. Cartpole first as the debugging task, then Walker. Diagnostic evaluation every 25,000 control
+   steps over five episodes, logged separately from training time.
+4. Run the three M1 measurements deferred by decision — random-policy floor, throughput, video —
+   since M10 reads the floor.
+5. Profile the five stages and fill in `Why It Is a Target`. Measure H=30 peak memory in a
+   steady-state update, not a bare rollout.
+6. Revisit the M5 diagnostics once online learning broadens the replay distribution.
 
 **Deferred from M1 by decision, not blocked:** random-policy return floor, throughput benchmark,
 random-policy video. Scripts are written; they run in the M9 measurement pass.
@@ -374,25 +383,29 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
 
 ## Last Session
 
-**Session 11 — audited M7 against the specification; the critic is correct, its test suite was not.**
+**Session 12 — implemented and closed M8, the continuous actor and imagined behaviour learning.**
 
-- **Every §4.7 / §5.4–§5.9 / §6.1–§6.3 requirement re-checked against `src/dreamer/critic.py`, and
-  the implementation holds on all of them.** Value stack, 255 logits, zero-init readout, measured
-  66,111; the one shared λ-return kernel with the bootstrap at `v[t+1]`; `disc=1` on the imagined
-  path and `1−1/333` on the replay path; position mean rather than a weight-normalized mean; scales
-  1.0 / 0.3; `slow ← 0.98·slow + 0.02·fast`. **No behavioural change was needed.**
-- **Five mutants survived the committed suite; all five now fail.** Imagined continuation weight not
-  detached; two-hot support narrowed from `symexp(±20)`; replay path trained on `feat[:, 1:]`
-  (invisible to an all-zero replay fixture); `scatter_imagined_return` taking `ret[:, -1]`
-  (invisible to a single-column fixture); and the hole guard never firing. Six tests added, 126 → 132.
-- **One real code gap: the hole guard was unreachable from the loss.** `check_bootstrap_holes` was
-  tested but only ran if a caller remembered to call it. `replay_loss` now takes an optional
-  `filled` mask and runs the guard itself — the only change to `src/`.
-- **The gate count in the docs was wrong.** `scripts/m7_gate.py` prints **36** checks, not 37;
-  `gate-2026-09-18.txt` always showed 36. Corrected here and in `results/m7/README.md`.
-- **Artifacts preserved.** The gate was re-run twice on 2026-09-19 and
-  `results/m7/value-vs-target-2026-09-18.csv` came back **bitwise identical**; nothing under
-  `results/` was remeasured.
+- **`src/dreamer/actor.py`:** `BoundedNormal` (tanh on the mean only, unsquashed sample, **no density
+  correction**), `Actor` (measured **50,316**), `ActorActionProvider`, `ReturnNormalizer` and the
+  REINFORCE loss with entropy **subtracted** at η=3e-4. Gate **63/63**, 38 unit tests, twelve mutants
+  each confirmed to fail. The agent total closes at **686,846 measured**, discharging §10-7.
+- **Two pinned-source questions resolved and written into §5.6.** `tarval = slowval if slowtar else
+  val` with `slowtar: False`, so the **fast** critic is both bootstrap and baseline. And `retnorm` is
+  **not** bias-corrected: `configs.yaml#L111` sets `debias: False`, overriding the class default of
+  `True`, so `S` sits at its floor of 1 while the EMAs climb — measured 1.0 vs 90.0 on the same input.
+  Both branches are implemented; the default is the pin.
+- **A correlation threshold was measured, rejected, and replaced.** `corr(Δlogπ, Â)` over 15,360 real
+  imagined positions saturates at 0.13–0.50 because one 50,316-parameter network cannot raise `logπ`
+  independently everywhere — it measures capacity, not the estimator. The committed check is the
+  capacity-free `Σ w·Â·Δlogπ > 0`, which held at every learning rate tried.
+- **Two clauses of the M8 gate text needed clarifying.** "Actions stay in bounds" means *executed*
+  actions — the policy is deliberately unsquashed and `DMCEnv.step` plus the RSSM's `a/max(1,|a|)`
+  enforce the range. "Entropy remains finite" is **not** "entropy stays positive": a Gaussian with
+  `σ < 1/√(2πe)` has negative differential entropy, so the assertion is the closed-form
+  `minstd`/`maxstd` bounds.
+- **One mutant survived the first suite:** the sampled action left attached. Actions leave
+  `imagine_trajectory`'s `no_grad` block already detached, so §5.6's `sg(act)` is invisible on that
+  path. A test that hands the loss an imagination whose actions carry a graph was added until it failed.
 
 ## Known Issues
 
@@ -415,10 +428,9 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
   a CUDA model raises at `torch.multinomial`. §8.1's stream separation must respect this.
 - **torch must come from the `cu129` index, not PyPI.** The GPU is Blackwell `sm_120` and the driver
   is 575.64.03; CUDA 13.0 wheels need driver ≥ 580, so the newest PyPI default build is excluded.
-- **`size1m` is 570,419 parameters for the world model and 686,846 for the full agent.** Far below
-  the paper's smallest evaluated row (12M), so no result can be compared to a published number.
-  `val` is now **measured** at 66,111 (world model + `val` = 636,530); only `pol` (50,316) is still
-  derived, owed at M8.
+- **`size1m` is 570,419 parameters for the world model and 686,846 for the full trainable agent,
+  all measured.** Far below the paper's smallest evaluated row (12M), so no result can be compared
+  to a published number. §10-7 is discharged; nothing in §4.11 is derived-only.
 - **All four documented transcription traps are now guarded.** Gate split, `BlockLinear` fan-in,
   encoder/decoder scaling asymmetry, and the `sg(…, skip=)` polarity — the last via the KL
   stop-gradient test. Each was mutation-verified to fail without its fix.
@@ -427,14 +439,20 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
   trains at roughly 1/30 speed and nothing else looks wrong. Launch long runs with the sandbox
   disabled and **read the `device:` line in the log** before walking away.
 - **No measurement of a trained *agent* exists — only of a trained world model.** `results/m5/`
-  holds open-loop prediction error and the first real training cost; `results/m6/` and
-  `results/m7/` hold imagination cost and critic arithmetic measured on an **untrained** model with
-  **random** actions. There is still **no return, no behaviour, and no per-stage profile**, because
-  the actor and the online loop do not exist.
-- **Re-running a gate overwrites its committed artifact.** `m6_gate.py` and `m7_gate.py` write
-  their CSV on every run, so a regression check silently replaces a committed measurement with a
-  fresh draw. M6's timings reproduce to <1% and its memory to the tenth of a MiB, but `git checkout`
-  the artifact after a regression run unless a re-measurement was intended.
+  holds open-loop prediction error and the first real training cost; `results/m6/`, `results/m7/`
+  and `results/m8/` hold imagination cost, critic arithmetic and policy arithmetic measured on an
+  **untrained** model. There is still **no return, no behaviour, and no per-stage profile**: the
+  actor exists but **nothing has ever stepped the environment with a learned policy**.
+- **Every M8 entropy, log-probability and loss is a property of a random actor.** The integration
+  section perturbs the reward and value kernels (otherwise the advantage is identically 0 and every
+  claim about it is vacuous), and the update diagnostic uses synthetic `U(-1, 1)` returns. The
+  100-step trajectory collapses `σ` to `minstd` by design — a fixed advantage with no critic
+  learning is not training, and its negative entropy is correct, not a failure.
+- **Re-running a gate overwrites its committed artifact.** `m6_gate.py`, `m7_gate.py` and
+  `m8_gate.py` write their CSV on every run, so a regression check silently replaces a committed
+  measurement with a fresh draw — M6's was overwritten and restored during the M8 session. M7's and
+  M8's reproduce bitwise and M6's timings to <1%, but `git checkout` the artifact after a regression
+  run unless a re-measurement was intended.
 - **Every M6 and M7 reward and value magnitude is meaningless.** Both gates perturb the zero-init
   output kernels so alignment and routing do not pass vacuously, which makes each readout a random
   draw over ±4.85e8 bins. They test that quantities are correctly *placed*, routed and finite, never

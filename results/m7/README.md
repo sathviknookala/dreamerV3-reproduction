@@ -28,8 +28,8 @@ Reproduce (~1 minute, collects its own data):
 
 `val` **66,111**, equal to the §4.11 derivation. The `slowval` mirror is a second 66,111,
 **excluded from the optimizer and untrained** — §4.11 already accounts for it that way. World model
-+ `val` = **636,530**; the agent total closes at 686,846 with `pol` 50,316, which is **still derived,
-owed at M8**.
++ `val` = **636,530**; the agent total closes at **686,846**, with `pol` 50,316 **measured at M8**
+([`results/m8/`](../m8/)).
 
 ## The two silent readings of γ — the reason this milestone is arithmetic-first
 
@@ -139,5 +139,5 @@ enforceable half is the bitwise world-model snapshot, which is asserted.
 
 Return normalization is **not** implemented here: `retnorm` is the actor's advantage normalizer
 (§5.6) and `valnorm`/`advnorm` are `impl: none`, so the critic carries no normalization state.
-`imagined_loss` **returns** `ret` rather than consuming it, because M8's `retnorm` EMA updates where
-`ret` is produced.
+`imagined_loss` **returns** `ret` rather than consuming it, because the `retnorm` EMA updates where
+`ret` is produced — which is exactly how M8's `imagined_actor_loss` consumes it.

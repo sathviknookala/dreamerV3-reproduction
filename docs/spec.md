@@ -655,9 +655,11 @@ the `slowval` mirror (66,111 more, untrained), optimizer state, and return-norm 
 > independently of the source-tracing pass and agreed with it to the digit, which is evidence the
 > shape table is **complete and self-consistent** — not evidence that any code is correct.
 > §10-7 requires `sum(p.numel())` over instantiated modules. **Discharged for `dyn` and `enc` at
-> M2+M3, for `dec`, `rew` and `con` at M4, and for `val` at M7** — every figure in this table
-> reproduced exactly from real modules, which is evidence that the §4.1–§4.5, §4.7 and §4.9 shape,
-> bias and `outscale` rules were transcribed correctly. Only `pol` remains, at M8.
+> M2+M3, for `dec`, `rew` and `con` at M4, for `val` at M7, and for `pol` at M8** — every figure in
+> this table reproduced exactly from real modules, which is evidence that the §4.1–§4.7 and §4.9
+> shape, bias and `outscale` rules were transcribed correctly. **Nothing in this table is
+> derived-only any more**; the total of 686,846 is measured
+> ([`results/m8/param-count-measured-2026-09-19.txt`](../results/m8/param-count-measured-2026-09-19.txt)).
 >
 > **The name `size1m` remains not evidence of any count.** The derived figure is ~0.69M, below the
 > preset's name and far below the paper's smallest evaluated row of 12M.
@@ -836,12 +838,30 @@ L_policy = - w_t · logπ(a_t) · Â_t   -   w_t · η · H[π(·|s_t)]
 | Item | Value / rule | Source |
 |---|---|---|
 | Estimator | **REINFORCE for continuous actions.** The sampled action is `sg`'d, so there is no pathwise term. | `agent.py#L411` |
-| Baseline | `Â_t = (R_t^λ − v(s_t)) / S`, with `tarval[:, :-1]` as the baseline | `agent.py#L408` |
+| Baseline | `Â_t = (R_t^λ − v(s_t)) / S`, with `tarval[:, :-1]` as the baseline. **`tarval` is the FAST critic** — see below | `agent.py#L408` |
 | **Entropy sign** | **SUBTRACTED in the minimized loss.** `η = +3e-4`. Minimizing maximizes entropy. | `agent.py#L413-L414`, `configs.yaml#L108` |
 | Return norm `S` | `S = max(1, EMA(Per(R,95) − Per(R,5), rate 0.01))` | `retnorm: {impl: perc, rate: 0.01, limit: 1.0, perclo: 5, perchi: 95}` |
 | Continuation weighting | `w_t = cumprod(con, 1)`, `sg`'d | `agent.py#L402`, `#L413` |
 | Distribution | `bounded_normal`, `minstd: 0.1`, `maxstd: 1.0`, `outscale: 0.01` — see §4.6 | `configs.yaml` |
 | `valnorm`, `advnorm` | `impl: none` — **not implemented** | `configs.yaml#L111-L113` |
+
+**`tarval` resolved, because §5.6 names it without expanding it.** `agent.py#L400` is
+`tarval = slowval if slowtar else val` and `configs.yaml#L108` sets `imag_loss.slowtar: False`, so
+**`tarval` is the fast critic**. It is used twice — as the λ-return bootstrap (`agent.py#L405`) and
+as the actor's baseline (`agent.py#L408`) — so the return and the baseline must be read from **one
+pre-update critic state**. The slow critic enters neither; it is a regularizer only (§5.7). Since
+`valnorm` is `impl: none`, `val = value.pred()` unscaled. **Measured at M8**
+([`results/m8/`](../results/m8/)) with fast and slow separated by 8.04e6.
+
+**`retnorm` is NOT bias-corrected at the pin, and the class default says otherwise.**
+`embodied/jax/utils.py#L22` defaults `Normalize.debias = True`, but `configs.yaml#L111` overrides it
+to **`False`** for `retnorm`, which is the only `Normalize` with `impl != none`. So the percentile
+EMAs are plain zero-initialized EMAs: `lo ← 0.99·lo + 0.01·P₅`, and `S = max(1, hi − lo)` sits at the
+**floor of 1** while they climb. Reading the class default instead would make `S` jump to the true
+percentile spread on the very first batch — measured in the M8 gate as **1.0 vs 90.0** on the same
+input. Both branches are implemented; the constructor default is the pinned `False`. The update
+happens **before** the scale is consumed (`__call__` runs `update` then `stats`), once per return
+batch.
 
 **No `scale_by_actent` exists at HEAD** — the inverted-parameterization branch present in the 2024
 rewrite was deleted. Do not implement it.
@@ -1352,7 +1372,7 @@ artifact under `results/` supports it. Each has a milestone and a check that dec
 | 4 | Episode length, physics substeps per control step | M1 | **VALIDATED 2026-09-17.** 1000 control steps for both; substeps **10** (Walker) vs **1** (Cartpole). Terminal-vs-time-limit semantics also confirmed empirically — §7.3 |
 | 5 | Random-policy return floor | M1 | 20 episodes per task under the final reward convention; mean and sd recorded. |
 | 6 | Environment throughput (`env_step`/s incl. render) | M1 | Steady-state rate over ≥10k steps, GPU confirmed free first. |
-| 7 | **Instantiated parameter count** | **M2+M3, M4, M7 (done); M8** | **World model MEASURED 2026-09-18: 570,419** — `dyn` 376,704, `enc` 14,304, `dec` 80,595, `rew` 57,663, `con` 41,153, each equal to the §4.11 derivation — [`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt). **`val` MEASURED 2026-09-18: 66,111**, equal to the derivation, with its untrained `slowval` mirror a second 66,111 excluded from the optimizer — [`results/m7/param-count-measured-2026-09-18.txt`](../results/m7/param-count-measured-2026-09-18.txt). World model + `val` = 636,530. With `pol` 50,316, **still derived and owed at M8**, the total closes at **686,846**. **The name `size1m` is not evidence of any count.** |
+| 7 | **Instantiated parameter count** | **M2+M3, M4, M7, M8 — DISCHARGED** | **World model MEASURED 2026-09-18: 570,419** — `dyn` 376,704, `enc` 14,304, `dec` 80,595, `rew` 57,663, `con` 41,153, each equal to the §4.11 derivation — [`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt). **`val` MEASURED 2026-09-18: 66,111**, equal to the derivation, with its untrained `slowval` mirror a second 66,111 excluded from the optimizer — [`results/m7/param-count-measured-2026-09-18.txt`](../results/m7/param-count-measured-2026-09-18.txt). World model + `val` = 636,530. **`pol` MEASURED 2026-09-19: 50,316**, equal to the derivation, so the trainable agent total closes at **686,846 measured** — [`results/m8/param-count-measured-2026-09-19.txt`](../results/m8/param-count-measured-2026-09-19.txt). **The name `size1m` is not evidence of any count.** |
 | 8 | Peak VRAM at H=30 | M9 | `torch.cuda.max_memory_allocated()` during a steady-state update; must leave headroom below 24467 MiB. **Partially discharged at M6: the imagination tensor alone peaks at 858.3 MiB for 1024 rollouts × 31 states** ([`results/m6/horizon-cost-2026-09-18.csv`](../results/m6/horizon-cost-2026-09-18.csv)). That is one forward rollout on an untrained model — no posterior pass, no backward, no actor or critic — so the steady-state figure is still owed. |
 | 9 | Per-stage time share | M9 | Collection, render, replay transfer, world-model update, behaviour update — shares summing to wall-clock. |
 | 10 | Realized training ratio | M9 | Logged, with the §7.7 convention named; compared to the requested 64. |
@@ -1371,20 +1391,20 @@ implementation**.
 | **implemented** | Code exists that realizes the specification. |
 | **validated** | The relevant milestone gate passed, with a committed artifact under `results/`. |
 
-Current state, as of 2026-09-18:
+Current state, as of 2026-09-19:
 
 | Scope | Status |
 |---|---|
-| Objectives, gradient routing, actor (§5–§6) | **`specified`** |
+| Objectives and gradient routing (§5–§6) | **`specified`**, each clause validated by the milestone that implements it |
 | Environment and transition contract (§7) | **`validated`** — 40/40 checks + M1 gate, [`results/m1/`](../results/m1/) |
 | Recurrence, encoder, posterior, prior, norm, init (§4.1, §4.2, §4.4, §4.8, §4.9) | **`validated`** — M2+M3 gate, [`results/m2m3/`](../results/m2m3/) |
 | Decoder, reward/continuation heads, `symexp_twohot`, world-model objective (§4.3, §4.5, §5.1–§5.5) | **`validated`** — M4 gate, [`results/m4/`](../results/m4/) |
 | Latent imagination and the continuation weight (§4.10 starts, §5.4 weight) | **`validated`** — M6 gate 55/55, [`results/m6/`](../results/m6/) |
-| Critic, λ-returns, slow critic, both critic losses (§4.7, §5.7, §6.1, §6.3) | **`validated`** — M7 gate 37/37, [`results/m7/`](../results/m7/) |
-| Actor (§4.6, §5.6, §6.2) | **`specified`** — not `implemented` |
+| Critic, λ-returns, slow critic, both critic losses (§4.7, §5.7, §6.1, §6.3) | **`validated`** — M7 gate 36/36, [`results/m7/`](../results/m7/) |
+| Actor, REINFORCE, return normalization (§4.6, §5.6, §6.2) | **`validated`** — M8 gate 63/63, [`results/m8/`](../results/m8/) |
 | Open-loop prediction from the prior (§4.4 prior path, §7.4 alignment) | **`validated`** — M5 gate 26/26, [`results/m5/`](../results/m5/) |
 | LaProp optimizer (§5.8) | **`validated`** — 8/8 hand-computed update tests, `tests/test_optim.py`; six mutants confirmed to fail |
-| §10-7 for `dyn`, `enc`, `dec`, `rew`, `con` | **measured** — 570,419 |
+| §10-7, every module in §4.11 | **measured** — 686,846 trainable, `slowval` mirror excluded |
 | Everything else in §10 | **`unmeasured`** |
 
 The M0 per-requirement matrix is

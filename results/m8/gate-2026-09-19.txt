@@ -1,0 +1,125 @@
+device: cuda  torch: 2.13.0+cu129
+seeds: torch 0, env 0, replay 0, imagination 0, provider 0
+batch: B=16 burn-in P=5 train T=64   horizon H=15   actent=0.0003
+
+## executed actions are bounded outside the policy (spec 4.6)
+PASS  the ClipAction boundary clips an out-of-range sample
+PASS  the raw sample itself was out of range  — 5.0
+
+The ACTOR needs no perturbation: outscale 0.01 leaves its gradients nonzero at init, so the
+      reward/critic 'perturb first' workaround does not apply to any policy claim below.
+
+## parameter count (measured)
+  pol       50316  derived    50316  delta    0
+  total    686846  derived   686846   (slowval mirror excluded)
+PASS  pol closes the 4.11 derivation  — 50316
+PASS  the trainable agent total closes at 686,846
+PASS  cartpole's actor differs only in the two heads
+
+## bounded_normal closed forms (spec 4.6)
+PASS  stddev at zero pre-activation is 0.9*sigmoid(2)+0.1  — 0.892717
+PASS  the mean is tanh-bounded
+PASS  stddev stays inside [minstd, maxstd]
+PASS  entropy is the closed form summed over the 6 action dims  — 3.851891
+PASS  log_prob of an out-of-range action is the plain Gaussian, no Jacobian term  — -538.0911
+PASS  raw samples are unsquashed and leave [-1, 1]  — 4.2156
+PASS  the RSSM bounds the action it consumes
+
+## return normalization (spec 5.6 retnorm)
+  pinned (debias False): lo 0.0500  hi 0.9500  S 1.0000
+PASS  the first update is rate * the percentiles
+PASS  S sits at the floor of 1.0 on the first batch  — 1.000000
+PASS  the second update is the hand-computed EMA  — 1.791000
+  debias True (NOT the pin): corr 0.0100  S 90.0000
+PASS  bias correction would read the true percentiles at once
+PASS  configs.yaml#L111 pins debias False, so the uncorrected branch is the live one
+PASS  a read-only call leaves the state alone
+PASS  the normalizer state round-trips
+PASS  the normalizer holds no trainable parameters
+
+## analytic update fixtures (spec 6.2)
+PASS  the zero-init critic makes the advantage exactly the return
+  logpi  a=+1: -1.435319 -> -0.805891   a=-1: -1.430359 -> -3.313280
+PASS  eta=0: the higher-advantage action gains log-probability
+PASS  eta=0: the lower-advantage action loses log-probability
+PASS  A=0: the score term contributes no gradient to the mean head
+PASS  A=0: the entropy term does reach the stddev head
+  entropy 1.30550516 -> 1.30556691
+PASS  A=0, eta>0: one update INCREASES entropy (fails if the sign is flipped)
+
+## integration on one real replay batch
+      The reward and value output kernels ARE perturbed here. At outscale 0.0 the imagined
+      reward is identically 0, so the return, the baseline and therefore the ADVANTAGE are all
+      exactly 0 and every claim about them holds vacuously. Each readout is then a random draw
+      over +-4.85e8 bins: the placement and routing are tested, the magnitudes mean nothing.
+PASS  the rollout is actor-driven and (N, H, A)  — (1024, 15, 6)
+PASS  imagined features carry no world-model graph
+PASS  the sampled actions are finite
+  policy +31.514330   value 2.4255   entropy 7.8331   S 1044696.6250   |A| 25.61
+PASS  logpi and entropy are (N, H) with no second slice  — (1024, 15)
+PASS  the weight slice is weight[:, :-1]
+PASS  the advantage and the weight are detached
+PASS  the policy loss and its entropy are finite
+PASS  the normalizer consumed its post-update scale
+PASS  the advantage is not identically zero, so the claims below are not vacuous  — 25.61
+PASS  the fast and slow critics are genuinely separated here  — 8.04e+06
+PASS  the baseline is the FAST critic at feat[:, :-1]
+PASS  total = 1.0*policy + 1.0*value + 0.3*repval
+PASS  seeded actor sampling reproduces
+PASS  a different seed draws differently
+
+## gradient routing (spec 5.9)
+PASS  policy reaches the actor trunk
+PASS  policy reaches the mean head
+PASS  policy reaches the stddev head
+PASS  policy does not reach the encoder
+PASS  policy does not reach the RSSM
+PASS  policy does not reach the decoder
+PASS  policy does not reach the reward head
+PASS  policy does not reach the continuation head
+PASS  policy does not reach the fast critic
+PASS  policy does not reach the slow critic
+PASS  value reaches the critic
+PASS  value does not reach the actor
+PASS  repval still reaches the encoder
+PASS  repval still reaches the RSSM
+PASS  repval does not reach the actor
+
+## REINFORCE on the real rollout with CONTROLLED returns
+  A FRESH zero-init critic, so the baseline is exactly 0 and the advantage is exactly
+  ret / S. The returns are a fixed seeded draw on U(-1, 1), not predictions: the perturbed
+  reward head above emits ~1e7 and would say nothing about the estimator.
+PASS  the fresh critic's baseline is exactly 0
+  one SGD step over 15360 real imagined positions:
+    sum(w * A * delta logpi) = +0.003254    policy loss -0.00921886 -> -0.00921908
+PASS  one update raises the ADVANTAGE-WEIGHTED log-probability at scale  — +0.003254
+PASS  the policy loss falls under that same step
+
+## a 100-step LaProp trajectory on the same fixed batch
+  Monitoring only. With a FIXED advantage, no critic learning and no new data, unconstrained
+  ascent drives stddev to minstd within ~50 steps and the differential entropy goes
+  NEGATIVE, which is correct for a Gaussian with sigma < 1/sqrt(2*pi*e), not a failure.
+  entropy bounds from minstd/maxstd: [-5.3019, 8.5136]
+   step   policy_loss     entropy   logp_mean     adv_mag           S
+      0     -0.009721      7.8326     -7.8387      0.5006      1.0000
+     10     -0.023589      7.8148     -7.9219      0.5006      1.0000
+     20     -0.074294      7.5677     -8.4607      0.5006      1.0000
+     30     -0.193771      6.5219    -10.0709      0.5006      1.0000
+     40     -0.866674      3.2319    -22.9495      0.5006      1.0000
+     50     -4.023144     -0.3132    -79.6776      0.5006      1.0000
+     60    -10.122875     -2.4102   -180.6290      0.5006      1.0000
+     70    -16.492828     -3.3419   -273.5283      0.5006      1.0000
+     80    -20.809465     -3.1254   -308.6119      0.4998      1.0016
+     90    -21.942202     -3.2174   -339.7095      0.4644      1.0778
+     99    -21.708836     -2.9465   -345.1618      0.4391      1.1401
+PASS  every logged row is finite
+PASS  entropy never leaves the closed-form bounds of the stddev parameterization  — min -3.3419
+PASS  the world model is bitwise unchanged
+PASS  the critic is bitwise unchanged
+PASS  the normalizer advanced exactly once per step  — 0.568222 vs 0.568222
+
+  peak VRAM, posterior + 1024 actor-driven rollouts at H=15 + all three losses: 1928.3 MiB
+
+wrote results/m8/actor-update-2026-09-19.csv
+
+ALL 63 CHECKS PASSED
