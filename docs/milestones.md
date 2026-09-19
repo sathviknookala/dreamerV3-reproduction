@@ -16,8 +16,9 @@ configuration are recorded** — not when the code runs.
 | **M1** | **CLOSED 2026-09-18.** Gate passed: 40/40 environment checks, 13/13 unit tests, 14/14 real-data replay smoke. Three empirical measurements deferred by decision — see the M1 status note. |
 | **M2+M3** | **CLOSED 2026-09-18.** Merged into one milestone with one gate. 12/12 unit tests, 12/12 real-batch GPU gate, measured parameter count equals the derivation. |
 | **M4** | **CLOSED 2026-09-18.** Gate passed: 11/11 unit tests, 15/15 real-batch GPU gate, fixed subset overfit, parameter count closes the derivation exactly. |
-| **M5** | **ACTIVE.** Next milestone. |
-| M6–M10 | Not started. |
+| **M5** | **CLOSED 2026-09-18.** Gate passed 26/26 on a trained world model and a held-out split. Evidence: [`results/m5/`](../results/m5/). |
+| **M6** | **ACTIVE.** Next milestone. |
+| M7–M10 | Not started. |
 
 The environment contract, the RSSM state-transition core and the full world-model objective are
 `implemented` and `validated`; the actor, critic and imagination are still only `specified` — see the status legend in
@@ -188,6 +189,35 @@ Use multiple latent samples per context and average prediction metrics rather th
 **Validation gate:** Automated checks establish that no future observation reaches the prediction path. On sufficiently varied data, action-conditioned predictions add measurable information beyond the simple baselines at short horizons. Inspect error growth at longer horizons without requiring it to be monotonic.
 
 **Deliverable:** Prediction-error curves and paired open-loop videos. Revisit these diagnostics after online learning broadens the replay distribution.
+
+> **Status 2026-09-18: PASSED.** `tests/test_openloop.py` 14/14, `tests/test_optim.py` 8/8, and
+> `scripts/m5_gate.py` **26/26** on a trained checkpoint and a held-out split —
+> [`results/m5/gate-2026-09-18.txt`](../results/m5/gate-2026-09-18.txt). Full record and limits:
+> [`results/m5/README.md`](../results/m5/README.md).
+>
+> **The world model predicts, it does not only reconstruct.** Open-loop reward MAE on 320 held-out
+> contexts × 8 latent samples beats the training-set-mean predictor at **every** distance 1–30
+> (0.0159 vs 0.0214 at k=1; 0.0153 vs 0.0207 at k=5; 0.0135 vs 0.0157 at k=30; worst ratio 0.908 at
+> k=28). Last-reward persistence is **stronger at k=1** (0.0052) and is overtaken at **k=5**, by a
+> narrow 1.6 %. Permuting the future actions in time costs 1.099× MAE — measurably
+> action-conditioned, but weakly so at this budget.
+>
+> Training: 120 train / 20 held-out random-policy Walker episodes, **7500 gradient steps** derived
+> from the §7.7 ratio (120 000 × 64 ÷ 1024), LaProp lr 4e-5, 1624.9 s, peak 1489.5 MiB.
+>
+> **Two complementary leak detectors were both necessary.** An `open_loop_predict` that accepts a
+> `future_observations` argument is caught by the encoder tripwire and the signature check but not by
+> the frame-corruption check; a `gather_contexts` that slides one future frame into the context is
+> caught **only** by the corruption check. Seven alignment/RNG/split mutants and six LaProp mutants
+> were each confirmed to fail their tests.
+>
+> **The deferred M4 items are discharged here:** the held-out-episode split, the constant and
+> persistence baselines, the checkpoint, and the paired open-loop frames. The **owed LaProp
+> hand-computed update test** (CLAUDE.md) is also discharged — `tests/test_optim.py`.
+>
+> **No deviation from the specification.** Deliberately **not** claimed: any statement about
+> prediction under a competent policy (the data is uniform-random), any return measurement, and any
+> variability estimate — one run, one seed, one task.
 
 ## M6 — Latent imagination engine
 

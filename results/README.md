@@ -25,7 +25,9 @@ results/
 - Figures regenerate from raw logs. If a figure cannot be regenerated, it is not a result.
 
 Measured so far: environment and compute checks ([`m1/`](m1/)), the RSSM + encoder parameter count
-([`m2m3/`](m2m3/)), and the world-model parameter count, objective gate and fixed-subset overfit
-([`m4/`](m4/)). No return, timing or VRAM figure for a *training
-run* exists; the random-policy floor and environment throughput are deferred to the M9 measurement
-pass.
+([`m2m3/`](m2m3/)), the world-model parameter count, objective gate and fixed-subset overfit
+([`m4/`](m4/)), and the **first real world-model training run** with its open-loop prediction
+evaluation on a held-out split ([`m5/`](m5/)) — 7500 gradient steps, 1624.9 s, peak 1489.5 MiB.
+**No return figure for a trained agent exists**; the random-policy return floor and the environment
+throughput benchmark are still deferred to the M9 measurement pass, and the 32.1 mean return
+recorded in `m5/` is a property of the collected random-policy data, not that floor.

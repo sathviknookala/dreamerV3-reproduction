@@ -42,6 +42,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
+| [results/m5/](results/m5/) | Before quoting an open-loop number, a training-run cost, or touching the prediction path. The M5 gate, the open-loop reward-MAE curve against both baselines, and the paired filmstrips. |
 | [results/m4/](results/m4/) | Before quoting a parameter count, a loss value, or touching the world model. The M4 gate, the overfit curve, and the measured world-model `sum(p.numel())`. |
 | [results/m2m3/](results/m2m3/) | Before touching the RSSM. The M2+M3 gate output and the measured RSSM + encoder parameter count. |
 | [results/m1/](results/m1/) | Environment and compute verification: the two check suites, their outputs, and the captured manifest. Re-run them after any dependency change. |
@@ -235,10 +236,11 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (36), the M1 smoke test (14 checks), the M2+M3 gate (12) and the M4 gate (15), verbatim:
+- Unit tests (58), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15) and the
+  M5 gate (26), verbatim:
 
   ```bash
-  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model
+  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim
   ```
 
   ```bash
@@ -251,6 +253,13 @@ training settings are context only, never the comparison.
 
   ```bash
   .venv/bin/python scripts/m4_gate.py
+  ```
+
+  The M5 gate needs the collected split and the trained checkpoint, neither of which is committed
+  (`data/` and `runs/` are ignored). Rebuild both, ~30 minutes, then gate:
+
+  ```bash
+  .venv/bin/python scripts/m5_collect.py && .venv/bin/python scripts/m5_train.py && .venv/bin/python scripts/m5_eval.py --tag 2026-09-18 && .venv/bin/python scripts/m5_gate.py --report results/m5/openloop-2026-09-18.json
   ```
 - A test that passes where the bug cannot occur is not a test — confirm it fails without its fix
 - **Domain testing hazards for this project** (each is a validation gate that a naive assertion
@@ -274,6 +283,11 @@ training settings are context only, never the comparison.
     the value is 0, not that it is small.
   - **Encoder scales `x/255 − 0.5`; the decoder target is `x/255` with no shift.** The asymmetry is
     real. A test that only checks output range passes either way.
+  - **A leaking open-loop rollout needs two different detectors.** An `open_loop_predict` that
+    accepts a `future_observations` argument is caught by the encoder tripwire and the signature
+    check but **not** by the frame-corruption check; a `gather_contexts` that slides one future frame
+    into the context window is caught **only** by the corruption check. Both are in the M5 gate, and
+    each was confirmed to pass the other's mutant.
   - **TF32 breaks hand-computed fixtures.** Measured on this GPU: max|GPU−CPU| on a 2048² fp32
     matmul is **6.8e-02 with TF32 on** and **1.3e-04 off** — a 500× difference. Set
     `torch.backends.cuda.matmul.allow_tf32 = False` and `torch.backends.cudnn.allow_tf32 = False`
@@ -327,54 +341,60 @@ code already says creates drift.
 
 ## Current Focus
 
-**M5 — open-loop prediction evaluation.** M0 closed 2026-09-17; M1, the merged **M2+M3**, and **M4**
-all closed 2026-09-18. The complete world model is `implemented` and `validated`: encoder, RSSM,
-decoder, reward and continuation heads, `symexp_twohot`, and the five-term objective. Measured
-**570,419** parameters, every module equal to its §4.11 derivation; with `pol` and `val` the total
-closes at **686,846** ([results/m4/](results/m4/)).
+**M6 — latent imagination engine.** M0 closed 2026-09-17; M1, the merged **M2+M3**, **M4** and **M5**
+all closed 2026-09-18. The world model is `implemented` and `validated`, and it is now also
+**demonstrated to predict**: open-loop reward MAE on held-out episodes beats the training-set-mean
+predictor at every distance 1–30 and overtakes last-reward persistence at k=5
+([results/m5/](results/m5/)).
 
-What exists: the full world-model training path plus `LaProp` (§5.8). What does not: **actor, critic,
-imagination, λ-returns, and the online loop.**
+What exists: the full world-model training path, `LaProp` (now gate-tested), the episode-split
+dataset, and the prior-only open-loop rollout with its evaluation and baselines. What does not:
+**actor, critic, λ-returns, and the online loop.**
 
 Next, in order:
 
-1. M5: open-loop rollouts — encode a context prefix, then run the **prior only** for ≥5 steps.
-   Assert on **reward MAE at distance ≥5 against a training-set-mean predictor**, never on pixel
-   error. Falling reconstruction loss is not evidence of a working world model.
-2. Average metrics over multiple latent samples per context and fix the seed before comparing
-   conditions — latent sampling is stochastic and picking attractive rollouts is the failure mode.
-3. The held-out-episode validation split and the persistence/constant baselines, deferred from M4's
-   gate text because they are M5's actual subject.
-4. M6 imagination must assert **structurally** that no observation tensor can reach the prior path.
-   `RSSM.imagine_step` already takes no embed argument; keep it that way.
+1. M6: begin from posterior states drawn from replay, take an action-provider interface with random
+   actions, advance through the prior, and return `H` actions/rewards/continuations and `H+1` latent
+   states. `RSSM.imagine_step` takes no embed argument — **keep it that way**; M5's structural
+   assertions and `encoder_tripwire` are reusable as-is.
+2. Exclude invalid and terminal start states, and implement the continuation weighting.
+3. Measure H∈{5,15,30} alignment, finiteness and memory. Image decoding stays **out** of the
+   behavior-training path; decode only for inspection.
+4. Revisit the M5 diagnostics once online learning broadens the replay distribution — M5's own text
+   requires it, and the current numbers describe a uniform-random data distribution only.
 
 **Deferred from M1 by decision, not blocked:** random-policy return floor, throughput benchmark,
-random-policy video. Scripts are written; they run in the M9 measurement pass.
+random-policy video. Scripts are written; they run in the M9 measurement pass. The 32.1 mean return
+in [results/m5/](results/m5/) is a property of the collected data, **not** that floor.
 
-`Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing has been profiled.
+`Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing has been profiled. M5
+did record the first real training cost — 7500 gradient steps in 1624.9 s, peak 1489.5 MiB — but a
+single world-model-only loop is not a per-stage profile.
 
 ## Last Session
 
-**Session 7 — implemented and validated M4, the world-model heads and training objective.**
+**Session 8 — implemented and validated M5, open-loop prediction on held-out episodes.**
 
-- **Seven load-bearing details were mutation-tested, and two initially survived.** The decoder
-  wrongly given the encoder's `−0.5` shift, and targets read off `s_j` instead of `s_{j+1}`, both
-  passed the first suite. Fixed by testing against an all-black image (where `/255` is exactly 0 and
-  the shifted target is exactly `−0.5`) and by exploiting that **only `s_L` ever sees the final
-  observation**, so a one-step shift makes the reward and continuation losses blind to it. All seven
-  mutants now fail.
-- **Three test failures turned out to be correct spec behaviour, not bugs.** `outscale: 0.0` makes
-  the reward loss **exactly `log(255)` for any target at init** and its gradient into the encoder
-  **exactly zero** until the output kernel leaves zero — so the reward path cannot be probed at init.
-  And `dyn` *does* reach the posterior head through the recurrence, since the posterior sample at
-  `t−1` feeds `deter` at `t`; the stop-gradient direction has to be asserted on the logit tensors,
-  not on parameters.
-- **Fixed-subset overfit, 300 LaProp steps:** `rec` 1235 → 38.9, `rew` 5.541 → 0.394, `con` 0.315 →
-  0.021, reward MAE 0.0203 → 0.0072. Real Walker batch, B=16 P=5 T=64, peak 1481.5 MiB.
-- **Parameter count closes the M0 derivation exactly**: `dec` 80,595, `rew` 57,663, `con` 41,153,
-  world model 570,419, and `+ pol + val = 686,846`.
-- **No deviation from the specification.** `LaProp` (§5.8) was implemented because the overfit check
-  needs the specified optimizer and Adam is explicitly not a substitute.
+- **The world model predicts, it does not only reconstruct.** 120 train / 20 held-out random-policy
+  Walker episodes, **7500 gradient steps** derived from the §7.7 ratio, LaProp lr 4e-5, 1624.9 s,
+  peak 1489.5 MiB. Open-loop reward MAE over 320 contexts × 8 latent samples beats the
+  training-set-mean predictor at **every** distance 1–30 (worst ratio 0.908 at k=28) and overtakes
+  last-reward persistence at **k=5**, narrowly (1.6 %). Persistence is far stronger at k=1.
+  Action shuffling costs 1.099× — measurably action-conditioned, weakly so.
+- **Two leak detectors were both necessary, and mutation proved it.** A `future_observations`
+  argument is invisible to the frame-corruption check; a one-frame slide inside `gather_contexts` is
+  invisible to the tripwire and the signature check. Seven open-loop mutants and six LaProp mutants
+  were each confirmed to fail. One mutation initially "survived" only because the patch text did not
+  match — mutation scripts now assert the edit applied.
+- **The owed LaProp test is discharged.** `tests/test_optim.py`, 8 hand-computed assertions in
+  float64 (float32 rounding at 1e-8 swamped the first attempt), covering the LaProp-vs-Adam ordering,
+  `eps` outside the sqrt, whole-tensor AGC, the `pmin` floor, warmup, and bias correction.
+- **The sandbox silently strips CUDA from detached processes.** `setsid nohup … &` through the
+  sandboxed shell fails `torch.cuda.is_available()` and falls back to **CPU without erroring** — the
+  first training launch ran 90 s on CPU before it was caught. Long runs must be launched with the
+  sandbox disabled, and the device line in the log must be read, not assumed.
+- **No deviation from the specification.** `results/m5/` records what the run cannot claim: nothing
+  about prediction under a competent policy, no return measurement, and no variability estimate.
 
 ## Known Issues
 
@@ -407,11 +427,16 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
 - **All four documented transcription traps are now guarded.** Gate split, `BlockLinear` fan-in,
   encoder/decoder scaling asymmetry, and the `sg(…, skip=)` polarity — the last via the KL
   stop-gradient test. Each was mutation-verified to fail without its fix.
-- **`LaProp` is implemented but not gate-tested.** It is used by the M4 overfit check and behaves,
-  but no test asserts its update rule against hand-computed values. Owed before any real training run.
-- **No measurement of a trained agent exists.** `results/m4/` holds a 300-step overfit on 4
-  sequences, which demonstrates the objective optimizes — **not** that the world model predicts.
-  That is M5's question. No return, no open-loop error, no training timing exists.
+- **A detached process launched through the sandboxed shell loses CUDA and falls back to CPU
+  silently.** `torch.cuda.is_available()` returns `False` with only a `UserWarning`; the run then
+  trains at roughly 1/30 speed and nothing else looks wrong. Launch long runs with the sandbox
+  disabled and **read the `device:` line in the log** before walking away.
+- **No measurement of a trained *agent* exists — only of a trained world model.** `results/m5/`
+  holds open-loop prediction error and the first real training cost. There is still **no return, no
+  behaviour, and no per-stage profile**, because the actor, critic and online loop do not exist.
+- **Every M5 number describes a uniform-random data distribution.** M5's own text requires the
+  diagnostics to be revisited once online learning broadens replay. Do not carry these numbers
+  forward as properties of a trained agent's world model.
 
 ---
 

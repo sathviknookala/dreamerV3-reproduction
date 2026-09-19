@@ -1380,7 +1380,8 @@ Current state, as of 2026-09-18:
 | Recurrence, encoder, posterior, prior, norm, init (§4.1, §4.2, §4.4, §4.8, §4.9) | **`validated`** — M2+M3 gate, [`results/m2m3/`](../results/m2m3/) |
 | Decoder, reward/continuation heads, `symexp_twohot`, world-model objective (§4.3, §4.5, §5.1–§5.5) | **`validated`** — M4 gate, [`results/m4/`](../results/m4/) |
 | Actor, critic, imagination, returns (§4.6, §4.7, §5.6, §5.7, §6.1) | **`specified`** — not `implemented` |
-| LaProp optimizer (§5.8) | **`implemented`** — used by the M4 overfit check; not yet gate-tested |
+| Open-loop prediction from the prior (§4.4 prior path, §7.4 alignment) | **`validated`** — M5 gate 26/26, [`results/m5/`](../results/m5/) |
+| LaProp optimizer (§5.8) | **`validated`** — 8/8 hand-computed update tests, `tests/test_optim.py`; six mutants confirmed to fail |
 | §10-7 for `dyn`, `enc`, `dec`, `rew`, `con` | **measured** — 570,419 |
 | Everything else in §10 | **`unmeasured`** |
 

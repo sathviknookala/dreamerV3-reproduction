@@ -1,0 +1,52 @@
+device: cuda  torch: 2.13.0+cu129
+checkpoint runs/m5/world-model.pt  7500 gradient steps
+train 120 episodes  holdout 20 episodes
+
+## 1-2. observations reach the context only
+PASS  encoder is called exactly once, on the context prefix only  — calls=[(40, 6, 64, 64, 3)]
+PASS  frames encoded == contexts x (C+1)  — 240 vs 240
+PASS  the prior API takes no image or embedding argument  — ['action', 'actions', 'generator', 'is_first', 'self', 'state']
+PASS  open_loop_predict takes exactly one observation argument, the context  — ['context_actions', 'context_observations', 'decode', 'future_actions', 'generator', 'model']
+PASS  randomizing every frame after the cutoff leaves the rollout bit-identical  — the corrupted frames are real targets, and they are not an input
+
+## 3-4. action and target alignment on real episodes
+PASS  distance k pairs state cutoff+k with rewards[cutoff+k-1]
+PASS  the rollout is action-conditioned: rolling the actions moves it  — mean |delta| 0.00394125
+PASS  a one-step target shift selects different real rewards
+
+## 5. reproducible stochastic evaluation
+PASS  same seed reproduces the metrics exactly
+PASS  four latent samples per context, with nonzero spread  — max sample sd 0.00419
+PASS  a different seed draws different latents
+PASS  the reported evaluation averaged multiple samples  — samples=8
+
+## 6. the held-out split cannot have been trained on
+PASS  train and holdout episode content is disjoint
+PASS  the checkpoint records exactly the training split  — 120 hashes
+PASS  no holdout episode is in the checkpoint's training set
+PASS  the report's holdout hashes match the holdout split
+
+## 7. baselines are computed from training data only
+PASS  the constant baseline equals the training-split mean  — 0.032110
+PASS  it is not the holdout mean  — train 0.032110  holdout 0.032075
+PASS  the baseline refuses held-out episodes
+
+## 8. a leaking rollout is detected
+PASS  the tripwire catches a posterior pass over the future frames  — encoded 1440 frames instead of 240
+
+## M5: open-loop reward prediction against the baselines
+     k    reward MAE    mean base     persist      shuffled  MAE/base
+     1      0.015872     0.021439    0.005213      0.015935     0.740
+     5      0.015265     0.020740    0.015510      0.016938     0.736
+    15      0.013938     0.015810    0.022210      0.015037     0.882
+    30      0.013482     0.015690    0.024658      0.015425     0.859
+PASS  reward MAE beats the training-mean baseline at k=1  — 0.015872 < 0.021439
+PASS  reward MAE beats the training-mean baseline at k=5  — 0.015265 < 0.020740
+PASS  predictions stay informative at every reported distance >= 5  — worst ratio 0.908 at k=28
+PASS  reward MAE beats last-reward persistence at k=5  — 0.015265 < 0.015510
+PASS  all reported metrics finite
+
+  action-shuffling diagnostic: mean MAE 0.014051 recorded vs 0.015437 with the future actions permuted in time (1.099x)
+  (a sensitivity diagnostic, not a causal control result)
+
+ALL CHECKS PASSED
