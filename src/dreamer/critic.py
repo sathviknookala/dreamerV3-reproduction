@@ -180,8 +180,13 @@ class Critic(nn.Module):
         is_last: Tensor,
         is_terminal: Tensor,
         boot: Tensor,
+        filled: Tensor | None = None,
     ) -> CriticOutput:
         """feat is NOT detached: repval gradients reach the encoder and RSSM (spec 6.3)."""
+        # a caller holding scatter_imagined_return's mask passes it here rather than remembering
+        if filled is not None:
+            check_bootstrap_holes(filled, is_terminal)
+
         # contdisc does not apply here; the replay path hard-codes the discount (spec 5.4)
         disc = 1.0 - 1.0 / self.horizon
         ret = lambda_return(is_last, is_terminal, rewards, boot, disc, self.lam)

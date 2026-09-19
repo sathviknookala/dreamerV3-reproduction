@@ -165,6 +165,15 @@ class TestValueHead(unittest.TestCase):
             # exactly 0, not merely small: a plain float32 sum over the bins returns -1.0
             self.assertEqual(float(value.predict(torch.randn(8, 640)).abs().max()), 0.0)
 
+    def test_the_bin_support_spans_symexp_plus_minus_20(self):
+        bins = ValueHead().bins
+        lim = float(torch.expm1(torch.tensor(20.0, dtype=torch.float64)))
+
+        self.assertEqual(bins.numel(), 255)
+        # a narrower support saturates real targets silently; only the endpoints pin it
+        self.assertAlmostEqual(float(bins[-1]) / lim, 1.0, places=6)
+        self.assertAlmostEqual(float(bins[0]) / lim, -1.0, places=6)
+
     def test_the_readout_is_the_expectation_with_no_outer_symexp(self):
         value = ValueHead()
         probs = torch.zeros(1, 255)
@@ -295,6 +304,20 @@ class TestImaginedLoss(unittest.TestCase):
 
         self.assertFalse(out.ret.requires_grad)
 
+    def test_the_continuation_weight_is_detached(self):
+        imag = imagination([1.0, 2.0, 3.0], [0.9, 0.9, 0.9])
+        imag.weight = imag.weight.detach().requires_grad_(True)
+        with torch.no_grad():
+            self.critic.value.mlp.out.weight.normal_(0.0, 0.3)
+
+        out = self.critic.imagined_loss(imag)
+        out.loss.backward()
+
+        # spec 5.9 lists the weight among the value loss's detached inputs: without the detach
+        # the critic loss backprops into the continuation head through cumprod(con)
+        self.assertFalse(out.weight.requires_grad)
+        self.assertIsNone(imag.weight.grad)
+
     def test_the_pad_value_on_rew_and_con_is_arbitrary(self):
         imag = imagination([1.0, 2.0, 3.0], [0.9, 0.9, 0.9], cont_start=0.9)
         baseline = self.critic.imagined_loss(imag).ret.clone()
@@ -395,6 +418,55 @@ class TestReplayLoss(unittest.TestCase):
         self.assertEqual(float(out.weight[0, 1]), 0.0)
         self.assertEqual(float(out.weight[1, 1]), 1.0)
 
+    def perturbed(self):
+        # at outscale 0.0 the loss is log(255) for every feature and every target, so an
+        # alignment or reduction claim would hold for the wrong reason
+        with torch.no_grad():
+            self.critic.value.mlp.out.weight.normal_(0.0, 0.3)
+        return self.critic
+
+    def test_the_trained_features_are_the_ones_the_targets_align_with(self):
+        critic = self.perturbed()
+        feat, rewards, is_last, is_terminal, boot = self.inputs()
+        feat = torch.randn(self.B, self.T, FEAT)
+        rewards = torch.arange(1.0, self.B * self.T + 1).reshape(self.B, self.T)
+
+        out = critic.replay_loss(feat, rewards, is_last, is_terminal, boot)
+        aligned = critic._fit(feat[:, :-1], out.ret, out.weight, "x").loss
+        shifted = critic._fit(feat[:, 1:], out.ret, out.weight, "x").loss
+
+        torch.testing.assert_close(out.loss, aligned, rtol=0, atol=0)
+        self.assertGreater(float((out.loss - shifted).abs().detach()), 1e-3)
+
+    def test_the_reduction_is_a_position_mean_not_a_weighted_mean(self):
+        critic = self.perturbed()
+        feat, rewards, is_last, is_terminal, boot = self.inputs()
+        feat = torch.randn(self.B, self.T, FEAT)
+        is_last[0, 1] = 1.0
+
+        out = critic.replay_loss(feat, rewards, is_last, is_terminal, boot)
+        per = critic.value.loss(feat[:, :-1], out.ret) + critic.value.loss(
+            feat[:, :-1], critic.slow.predict(feat[:, :-1]).detach()
+        )
+
+        torch.testing.assert_close(out.loss, (per * out.weight).mean(), rtol=1e-6, atol=1e-6)
+        # dividing by the weight sum instead would rescale by numel/sum = 6/5 here
+        self.assertGreater(
+            float((out.loss - (per * out.weight).sum() / out.weight.sum()).abs().detach()), 1e-3
+        )
+
+    def test_a_non_terminal_hole_is_rejected_when_the_fill_mask_is_supplied(self):
+        feat, rewards, is_last, is_terminal, boot = self.inputs()
+        filled = torch.ones(self.B, self.T, dtype=torch.bool)
+        self.critic.replay_loss(feat, rewards, is_last, is_terminal, boot, filled)
+
+        filled[0, 2] = False
+        with self.assertRaises(ValueError):
+            self.critic.replay_loss(feat, rewards, is_last, is_terminal, boot, filled)
+
+        is_terminal[0, 2] = 1.0
+        self.critic.replay_loss(feat, rewards, is_last, is_terminal, boot, filled)
+
     def test_a_time_limit_is_not_a_terminal(self):
         feat, rewards, is_last, is_terminal, boot = self.inputs()
         boot = torch.full_like(boot, 5.0)
@@ -456,6 +528,21 @@ class TestBootstrapScatter(unittest.TestCase):
         self.assertFalse(bool(filled[:, : self.P].any()))
         self.assertTrue(bool(filled[:, self.P :].all()))
         torch.testing.assert_close(grid[0, self.P :], torch.tensor([1.0, 2.0, 3.0]), rtol=0, atol=0)
+
+    def test_the_scatter_takes_the_first_imagined_return_not_the_last(self):
+        loss_mask, is_terminal = self.masks()
+        index = self.starts(loss_mask, is_terminal)
+        n = index.numel()
+        # R_0 is the return at the imagination START state, which is the replay position itself
+        ret = torch.stack(
+            [torch.arange(1.0, n + 1), torch.full((n,), -7.0), torch.full((n,), -9.0)], dim=1
+        )
+
+        grid, _ = scatter_imagined_return(ret, index, self.B, self.P + self.T)
+
+        torch.testing.assert_close(
+            grid[0, self.P :], torch.tensor([1.0, 2.0, 3.0]), rtol=0, atol=0
+        )
 
     def test_a_terminal_hole_is_permitted_and_a_non_terminal_hole_is_not(self):
         loss_mask, is_terminal = self.masks()

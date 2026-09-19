@@ -223,8 +223,8 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (126), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
-  M5 gate (26), the M6 gate (55) and the M7 gate (37), verbatim:
+- Unit tests (132), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
+  M5 gate (26), the M6 gate (55) and the M7 gate (36), verbatim:
 
   ```bash
   PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim test_imagine test_critic
@@ -374,29 +374,25 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
 
 ## Last Session
 
-**Session 10 — implemented and validated M7, the critic and its return targets.**
+**Session 11 — audited M7 against the specification; the critic is correct, its test suite was not.**
 
-- **The return arithmetic is pinned to hand-computed values.** `src/dreamer/critic.py`: `ValueHead`
-  (measured **66,111**, equal to the §4.11 derivation), `SlowCritic`, the shared λ-return kernel
-  with the bootstrap at `v[t+1]`, and both critic losses. Gate **37/37**, 39 unit tests. All six
-  §6.1 fixtures hold. The §5.4 γ trap is separated numerically: **correct 14.688751**, double-counted
-  14.386389, dropped 15.000000 — all three train without raising.
-- **Fifteen mutants each confirmed to fail; two survived the first suite.** "Slow critic as the
-  bootstrap" and "`slowreg` dropped" both survived because the `outscale: 0.0` readout makes fast and
-  slow identical at exactly 0 — the reward-head hazard, recurring for the critic. Tests that perturb
-  the fast head were added until both failed.
-- **Two things the M7 text does not name.** The replay bootstrap scatter addresses the **(B, P+T)**
-  grid, not (B, T) — `select_start_states` masks from `loss_mask` of shape (B, P+T) and its index
-  runs to 1103. And a zero hole in that bootstrap corrupts **every earlier** target through the
-  backward recursion, which the position weight does not mask; holes are safe only because the drop
-  criterion is `is_terminal`. `check_bootstrap_holes` enforces that at runtime.
-- **The first fitting diagnostic was misleading and was rewritten.** Fitting the perturbed critic to
-  its own self-bootstrapped targets "passed" at MAE 2.7e5 against targets of 0.4. The committed
-  diagnostic fits a **fresh** critic to fixed discounted **real** rewards: value 0.0000 → 0.3907,
-  MAE 0.4029 → 0.0538, world model bitwise unchanged.
-- **No deviation from the specification.** `retnorm` is correctly absent — it is the actor's
-  normalizer — and `imagined_loss` returns `ret` rather than consuming it, because M8's retnorm EMA
-  updates where `ret` is produced.
+- **Every §4.7 / §5.4–§5.9 / §6.1–§6.3 requirement re-checked against `src/dreamer/critic.py`, and
+  the implementation holds on all of them.** Value stack, 255 logits, zero-init readout, measured
+  66,111; the one shared λ-return kernel with the bootstrap at `v[t+1]`; `disc=1` on the imagined
+  path and `1−1/333` on the replay path; position mean rather than a weight-normalized mean; scales
+  1.0 / 0.3; `slow ← 0.98·slow + 0.02·fast`. **No behavioural change was needed.**
+- **Five mutants survived the committed suite; all five now fail.** Imagined continuation weight not
+  detached; two-hot support narrowed from `symexp(±20)`; replay path trained on `feat[:, 1:]`
+  (invisible to an all-zero replay fixture); `scatter_imagined_return` taking `ret[:, -1]`
+  (invisible to a single-column fixture); and the hole guard never firing. Six tests added, 126 → 132.
+- **One real code gap: the hole guard was unreachable from the loss.** `check_bootstrap_holes` was
+  tested but only ran if a caller remembered to call it. `replay_loss` now takes an optional
+  `filled` mask and runs the guard itself — the only change to `src/`.
+- **The gate count in the docs was wrong.** `scripts/m7_gate.py` prints **36** checks, not 37;
+  `gate-2026-09-18.txt` always showed 36. Corrected here and in `results/m7/README.md`.
+- **Artifacts preserved.** The gate was re-run twice on 2026-09-19 and
+  `results/m7/value-vs-target-2026-09-18.csv` came back **bitwise identical**; nothing under
+  `results/` was remeasured.
 
 ## Known Issues
 

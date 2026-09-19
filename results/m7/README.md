@@ -1,8 +1,10 @@
 # M7 — critic and return targets
 
 **Read before quoting a value, a λ-return or a critic parameter count, or before touching the return
-path.** Gate passed 2026-09-18, 37/37: [`gate-2026-09-18.txt`](gate-2026-09-18.txt), on top of 39
-unit tests in `tests/test_critic.py`.
+path.** Gate passed 2026-09-18, **36/36** printed checks plus the raising `check_bootstrap_holes`
+guard: [`gate-2026-09-18.txt`](gate-2026-09-18.txt), on top of **45** unit tests in
+`tests/test_critic.py`. Re-verified 2026-09-19 — the gate reproduces and
+[`value-vs-target-2026-09-18.csv`](value-vs-target-2026-09-18.csv) is bitwise identical.
 
 ## What was run
 
@@ -104,6 +106,17 @@ corrupted prefix. Holes are harmless here **only because** the drop criterion is
 rule that is not `is_terminal` silently corrupts the targets.**
 
 ## Mutation evidence
+
+Five further mutants were found to **survive** the original suite in the 2026-09-19 audit and now
+fail: the imagined continuation weight not detached (§5.9 lists it among the value loss's detached
+inputs; the detach was present, the assertion was not); the two-hot support narrowed from
+`symexp(±20)`; the replay path trained on `feat[:, 1:]` instead of `feat[:, :-1]`, which the
+all-zero replay fixture could not see; `scatter_imagined_return` taking `ret[:, -1]` instead of
+`ret[:, 0]`, invisible because the scatter fixture was single-column; and the hole guard never
+firing from `replay_loss`. **Only the last was a code gap** — `check_bootstrap_holes` existed and
+was tested but could only be reached by a caller remembering to call it, so `replay_loss` now takes
+an optional `filled` mask and runs the guard itself. The other four were test gaps against a
+correct implementation.
 
 Fifteen mutants of `src/dreamer/critic.py` were each confirmed to fail the suite: bootstrap at
 `v[t]`; λ-return output off by one; `is_last` as the terminal signal; slow critic as the bootstrap;
