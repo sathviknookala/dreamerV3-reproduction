@@ -100,7 +100,7 @@ hypothesis rather than an open question.
 
 **~0.69M derived from the specification, not measured** —
 [`results/m0/param-count-derived-2026-09-17.txt`](../results/m0/param-count-derived-2026-09-17.txt).
-Below the preset's name and far below the paper's smallest evaluated row of 12M. **The RSSM and
-encoder halves are now measured** — 391,008, equal to their derived figures
-([`results/m2m3/param-count-measured-2026-09-18.txt`](../results/m2m3/param-count-measured-2026-09-18.txt));
-the decoder and heads are still owed at M4 ([spec.md §10-7](spec.md)).
+Below the preset's name and far below the paper's smallest evaluated row of 12M. **The whole world
+model is now measured** — 570,419, every module equal to its derived figure
+([`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt));
+only the actor and critic remain, at M7–M8 ([spec.md §10-7](spec.md)).

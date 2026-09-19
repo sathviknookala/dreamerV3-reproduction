@@ -1,0 +1,15 @@
+# MEASURED parameter count, instantiated PyTorch world model
+# walker_walk, A=6, size1m + dmc_vision; torch 2.13.0+cu129
+#
+module      measured   derived   delta
+dyn           376704    376704       0
+enc            14304     14304       0
+dec            80595     80595       0
+rew            57663     57663       0
+con            41153     41153       0
+WORLD         570419    570419       0
+
+# full agent is 686,846 derived; pol (50,316) and val (66,111) are owed at M7-M8
+# world model + pol + val = 686846
+
+PASS - measured == derived

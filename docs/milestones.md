@@ -15,11 +15,12 @@ configuration are recorded** — not when the code runs.
 | **M0** | **CLOSED 2026-09-17.** Gate passed. Evidence: [spec.md](spec.md) and the audit at [`results/m0/m0-audit-2026-09-17.md`](../results/m0/m0-audit-2026-09-17.md). |
 | **M1** | **CLOSED 2026-09-18.** Gate passed: 40/40 environment checks, 13/13 unit tests, 14/14 real-data replay smoke. Three empirical measurements deferred by decision — see the M1 status note. |
 | **M2+M3** | **CLOSED 2026-09-18.** Merged into one milestone with one gate. 12/12 unit tests, 12/12 real-batch GPU gate, measured parameter count equals the derivation. |
-| **M4** | **ACTIVE.** Next milestone. |
-| M5–M10 | Not started. |
+| **M4** | **CLOSED 2026-09-18.** Gate passed: 11/11 unit tests, 15/15 real-batch GPU gate, fixed subset overfit, parameter count closes the derivation exactly. |
+| **M5** | **ACTIVE.** Next milestone. |
+| M6–M10 | Not started. |
 
-The environment contract and the RSSM state-transition core are `implemented` and `validated`;
-everything downstream of the encoder is still only `specified` — see the status legend in
+The environment contract, the RSSM state-transition core and the full world-model objective are
+`implemented` and `validated`; the actor, critic and imagination are still only `specified` — see the status legend in
 [spec.md §11](spec.md).
 
 ---
@@ -152,6 +153,27 @@ Start by fitting a small fixed replay subset, then train on a larger training sp
 **Validation gate:** The small subset can be fit; validation predictions improve over simple constant or persistence baselines where appropriate. Isolated loss checks demonstrate the intended prior/posterior gradient routing, accounting for shared recurrent parameters. Good reconstruction alone does not pass the world-model gate.
 
 **Deliverable:** A world-model checkpoint, learning curves, reconstructions, and a record of resolved numerical or temporal bugs.
+
+> **Status 2026-09-18: PASSED.** `tests/test_world_model.py` 11/11 and `scripts/m4_gate.py` 15/15 on a
+> real Walker batch — [`results/m4/gate-2026-09-18.txt`](../results/m4/gate-2026-09-18.txt).
+> Fixed-subset overfit over 300 LaProp steps: `rec` 1235 → 38.9 (0.032×), `rew` 5.541 → 0.394
+> (0.071×), `con` 0.315 → 0.021 (0.066×), reward MAE 0.0203 → 0.0072. Measured parameter counts
+> `dec` 80,595, `rew` 57,663, `con` 41,153; **world model 570,419**, and
+> `570,419 + pol 50,316 + val 66,111 = 686,846`, closing the §4.11 derivation exactly
+> ([`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt)).
+> **No deviation from the specification.**
+>
+> **Seven load-bearing details were mutation-tested**, each confirmed to fail the suite when broken:
+> the decoder's missing `−0.5` shift, a one-step target shift onto `s_j`, free nats applied per
+> factor, swapped KL stop-gradients, a pixel-mean reconstruction, burn-in included in the loss, and a
+> plain-sum two-hot readout. The first two initially **survived** and the tests were strengthened
+> until they did not.
+>
+> **Deferred from the gate text, not blocked:** the held-out-episode validation split, the
+> persistence/constant baseline comparison and the saved checkpoint and reconstruction images belong
+> to **M5**, whose whole purpose is open-loop prediction evaluation against exactly those baselines.
+> Running them here would duplicate M5 and pre-empt its gate. `LaProp` (§5.8) was implemented because
+> the overfit check needs the specified optimizer and Adam is explicitly not a substitute.
 
 ## M5 — Open-loop prediction evaluation
 

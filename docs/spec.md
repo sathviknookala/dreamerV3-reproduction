@@ -655,9 +655,9 @@ the `slowval` mirror (66,111 more, untrained), optimizer state, and return-norm 
 > independently of the source-tracing pass and agreed with it to the digit, which is evidence the
 > shape table is **complete and self-consistent** — not evidence that any code is correct.
 > §10-7 requires `sum(p.numel())` over instantiated modules. **Discharged for `dyn` and `enc` at
-> M2+M3**: measured 376,704 and 14,304, matching this table exactly, which is evidence that the §4.1,
-> §4.2, §4.4 and §4.9 shape and bias rules were transcribed correctly. `dec`, `rew`, `con`, `pol` and
-> `val` remain owed at M4.
+> M2+M3 and for `dec`, `rew` and `con` at M4** — every figure in this table reproduced exactly from
+> real modules, which is evidence that the §4.1–§4.5 and §4.9 shape, bias and `outscale` rules were
+> transcribed correctly. Only `pol` and `val` remain, at M7–M8.
 >
 > **The name `size1m` remains not evidence of any count.** The derived figure is ~0.69M, below the
 > preset's name and far below the paper's smallest evaluated row of 12M.
@@ -1352,7 +1352,7 @@ artifact under `results/` supports it. Each has a milestone and a check that dec
 | 4 | Episode length, physics substeps per control step | M1 | **VALIDATED 2026-09-17.** 1000 control steps for both; substeps **10** (Walker) vs **1** (Cartpole). Terminal-vs-time-limit semantics also confirmed empirically — §7.3 |
 | 5 | Random-policy return floor | M1 | 20 episodes per task under the final reward convention; mean and sd recorded. |
 | 6 | Environment throughput (`env_step`/s incl. render) | M1 | Steady-state rate over ≥10k steps, GPU confirmed free first. |
-| 7 | **Instantiated parameter count** | **M2+M3 (partial), M4** | **RSSM + encoder MEASURED 2026-09-18: 391,008** (`dyn` 376,704 + `enc` 14,304), equal to the §4.11 derivation to the digit — [`results/m2m3/param-count-measured-2026-09-18.txt`](../results/m2m3/param-count-measured-2026-09-18.txt). Decoder and heads still owed at M4. **The name `size1m` is not evidence of any count.** |
+| 7 | **Instantiated parameter count** | **M2+M3, M4 (done); M7–M8** | **World model MEASURED 2026-09-18: 570,419** — `dyn` 376,704, `enc` 14,304, `dec` 80,595, `rew` 57,663, `con` 41,153, each equal to the §4.11 derivation — [`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt). With `pol` 50,316 and `val` 66,111 still owed at M7–M8 the total closes at **686,846**. **The name `size1m` is not evidence of any count.** |
 | 8 | Peak VRAM at H=30 | M9 | `torch.cuda.max_memory_allocated()` during a steady-state update; must leave headroom below 24467 MiB. |
 | 9 | Per-stage time share | M9 | Collection, render, replay transfer, world-model update, behaviour update — shares summing to wall-clock. |
 | 10 | Realized training ratio | M9 | Logged, with the §7.7 convention named; compared to the requested 64. |
@@ -1378,8 +1378,10 @@ Current state, as of 2026-09-18:
 | Objectives, gradient routing, imagination, actor/critic (§5–§6) | **`specified`** |
 | Environment and transition contract (§7) | **`validated`** — 40/40 checks + M1 gate, [`results/m1/`](../results/m1/) |
 | Recurrence, encoder, posterior, prior, norm, init (§4.1, §4.2, §4.4, §4.8, §4.9) | **`validated`** — M2+M3 gate, [`results/m2m3/`](../results/m2m3/) |
-| Decoder, heads, actor, critic (§4.3, §4.5–§4.7) | **`specified`** — not `implemented` |
-| §10-7 for `dyn` and `enc` | **measured** — 391,008 |
+| Decoder, reward/continuation heads, `symexp_twohot`, world-model objective (§4.3, §4.5, §5.1–§5.5) | **`validated`** — M4 gate, [`results/m4/`](../results/m4/) |
+| Actor, critic, imagination, returns (§4.6, §4.7, §5.6, §5.7, §6.1) | **`specified`** — not `implemented` |
+| LaProp optimizer (§5.8) | **`implemented`** — used by the M4 overfit check; not yet gate-tested |
+| §10-7 for `dyn`, `enc`, `dec`, `rew`, `con` | **measured** — 570,419 |
 | Everything else in §10 | **`unmeasured`** |
 
 The M0 per-requirement matrix is

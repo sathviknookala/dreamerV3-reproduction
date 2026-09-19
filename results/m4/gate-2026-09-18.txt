@@ -1,0 +1,48 @@
+/home/sathvik/dreamer/scripts/m4_gate.py:71: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
+  print(f"  {key:<5}{float(value):>14.4f}")
+device: cuda  torch: 2.13.0+cu129
+
+## parameter counts (measured)
+  enc     14304  derived    14304  delta    0
+  dyn    376704  derived   376704  delta    0
+  dec     80595  derived    80595  delta    0
+  rew     57663  derived    57663  delta    0
+  con     41153  derived    41153  delta    0
+  TOTAL  570419  derived   570419
+PASS  per-module counts match the derivation
+PASS  world-model total == 570408 + heads  — 570419
+
+## real replay batch
+  rec       1207.4222
+  rew          5.5413
+  con          0.3287
+  dyn          7.0706
+  rep          7.0706
+  total     1221.0697
+  dyn_raw 7.0706   rep_raw 7.0706
+  post_entropy 40.3926   prior_entropy 41.4274
+  reward_mae 0.032002   cont_mae 0.269275
+PASS  train_positions == B*T  — 1024.0
+PASS  reward prediction is exactly 0 at init
+PASS  all losses finite
+PASS  gradients finite
+PASS  encoder receives gradient
+PASS  rssm receives gradient
+PASS  decoder receives gradient
+  peak VRAM, one B=16 P=5 T=64 world-model step: 1481.5 MiB
+
+## overfit a fixed subset (B=4, 300 steps, LaProp lr=3e-4)
+   step         rec       rew       con   dyn_raw   rep_raw   rew_mae
+      0     1235.41    5.5413    0.3147    7.3109    7.3109    0.0203
+     50      148.01    3.2519    0.0246    4.8145    4.8145    0.0144
+    100       91.07    1.2951    0.0207    0.9338    0.9338    0.0094
+    150       71.22    0.5321    0.0213    4.9342    4.9342    0.0076
+    200       57.43    0.4378    0.0218    4.2420    4.2420    0.0077
+    250       45.97    0.4086    0.0211    3.8606    3.8606    0.0077
+    299       39.35    0.3941    0.0208    3.0101    3.0101    0.0073
+PASS  rec falls materially  — 1235 -> 39.35  (0.032x)
+PASS  rew falls materially  — 5.541 -> 0.3941  (0.071x)
+PASS  con falls materially  — 0.3147 -> 0.02076  (0.066x)
+
+ALL CHECKS PASSED
