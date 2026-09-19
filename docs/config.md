@@ -102,5 +102,7 @@ hypothesis rather than an open question.
 [`results/m0/param-count-derived-2026-09-17.txt`](../results/m0/param-count-derived-2026-09-17.txt).
 Below the preset's name and far below the paper's smallest evaluated row of 12M. **The whole world
 model is now measured** — 570,419, every module equal to its derived figure
-([`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt));
-only the actor and critic remain, at M7–M8 ([spec.md §10-7](spec.md)).
+([`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt))
+— and so is the critic, `val` **66,111**
+([`results/m7/param-count-measured-2026-09-18.txt`](../results/m7/param-count-measured-2026-09-18.txt)),
+for a measured 636,530. **Only the actor remains, at M8** ([spec.md §10-7](spec.md)).
