@@ -1,0 +1,16 @@
+device: cuda  torch: 2.13.0+cu129
+PASS  posterior deter  — (16, 70, 512)
+PASS  posterior stoch  — (16, 70, 32, 4)
+PASS  posterior feat  — (16, 70, 640)
+PASS  prior logit  — (16, 70, 32, 4)
+PASS  states finite
+PASS  stoch factors are one-hot
+PASS  posterior probs normalize
+PASS  image reaches the posterior at the reset step
+PASS  all parameters received gradient
+PASS  gradients finite
+PASS  gradients nonzero
+PASS  parameter count == derived 391008  — 391008
+peak VRAM for one B=16 P=5 T=64 forward+backward: 830.7 MiB
+
+ALL CHECKS PASSED

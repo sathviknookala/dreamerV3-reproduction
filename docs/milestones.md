@@ -13,10 +13,14 @@ configuration are recorded** — not when the code runs.
 | Milestone | Status |
 |---|---|
 | **M0** | **CLOSED 2026-09-17.** Gate passed. Evidence: [spec.md](spec.md) and the audit at [`results/m0/m0-audit-2026-09-17.md`](../results/m0/m0-audit-2026-09-17.md). |
-| **M1** | **ACTIVE.** Next milestone. Two blocking environment checks first — see [spec.md §10-1 and §10-2](spec.md). |
-| M2–M10 | Not started. |
+| **M1** | **CLOSED 2026-09-18.** Gate passed: 40/40 environment checks, 13/13 unit tests, 14/14 real-data replay smoke. Three empirical measurements deferred by decision — see the M1 status note. |
+| **M2+M3** | **CLOSED 2026-09-18.** Merged into one milestone with one gate. 12/12 unit tests, 12/12 real-batch GPU gate, measured parameter count equals the derivation. |
+| **M4** | **ACTIVE.** Next milestone. |
+| M5–M10 | Not started. |
 
-Nothing is `implemented` and nothing is `validated` — see the status legend in [spec.md §11](spec.md).
+The environment contract and the RSSM state-transition core are `implemented` and `validated`;
+everything downstream of the encoder is still only `specified` — see the status legend in
+[spec.md §11](spec.md).
 
 ---
 
@@ -85,27 +89,55 @@ Initially sample contiguous within-episode sequences. Define how a sequence begi
 > remaining budget on numbers that would sit unused; they are scheduled with the M9 measurement pass.
 > `scripts/m1_random_floor.py` and `scripts/m1_throughput.py` are written and waiting.
 
-## M2 — Deterministic recurrent transition
+## M2+M3 — RSSM state-transition core
 
-**Purpose:** Implement the agent's memory and action-conditioned state update.
+**Merged 2026-09-18.** M2 (deterministic recurrence) and M3 (encoder, posterior, prior) were
+specified as separate milestones but share one object: there is no useful recurrence without a
+stochastic state to carry, and M2's own text conceded this by allowing "synthetic stochastic states
+before the encoder exists". Two gates over one module would have meant testing the recurrence twice —
+once against a placeholder and once for real. They are now **one milestone with one validation
+suite**; the deliverables of both are preserved.
 
-**Implement:** The recurrence `h_{t+1}=f(h_t,z_t,a_t)` using the M0 recurrent architecture. Define separate single-step and sequence interfaces, reset masks, tensor layouts, and initialization. M2 can use synthetic stochastic states before the encoder exists.
+**Purpose:** Implement the agent's memory, construct latent states from observations, and predict
+latent states without observations.
 
-**Validation gate:** Single-step iteration agrees with the sequence implementation on identical inputs. Changing prior actions or latent states affects the subsequent hidden state. Resetting one batch element does not alter others. Gradients remain finite through a short recurrent sequence.
+**Implement:** `h_t = f(h_{t-1}, z_{t-1}, a_{t-1})` on the block-diagonal cell of
+[spec.md §4.1](spec.md); the CNN encoder of §4.2; the posterior `q(z_t | h_t, e_t)` and prior
+`p(z_t | h_t)` of §4.4 with straight-through categorical sampling, uniform mixing and explicit
+aggregation over the 32 factors. Expose the complete model state `s_t = [h_t, z_t]`, single-step and
+sequence APIs, reset masks, and an observation-conditioned path alongside a prior-only path that
+takes no image argument. The decoder, the reward/continuation heads and the objective are **M4**.
 
-**Deliverable:** Tested recurrent transition with explicit shape and state contracts.
+**Validation gate — one suite, `tests/test_rssm.py` (12 tests):**
 
-## M3 — Visual encoder, posterior, and dynamics prior
+1. single-step recurrence agrees with the sequence API on identical inputs
+2. reset masks isolate batch elements
+3. changing actions, stochastic states or images changes the appropriate downstream state
+4. the posterior depends on the image; the prior-only API has no image argument (asserted
+   structurally, not just numerically)
+5. categorical probabilities normalize and samples are valid one-hot factors
+6. straight-through samples carry finite, nonzero gradients to logits
+7. empirical sampling frequencies match a known categorical within tolerance
+8. gradients stay finite through a short full RSSM sequence
+9. every public API returns the shapes and layouts in [spec.md §4](spec.md)
+10. the block-GRU gate **index map** — not just its shapes
+11. `BlockLinear` fan-in is the full input width, not the per-block width
+12. measured `sum(p.numel())` equals the §4.11 derivation
 
-**Purpose:** Construct latent states from observations and predict latent states without observations.
+Gates 10–12 are not in the original M2/M3 text. They were added because mutation testing showed the
+first nine pass unchanged against a flat gate split and against a per-block fan-in — the two hazards
+[CLAUDE.md](../CLAUDE.md) names as silently wrong but still trainable. Each of 10–12 was confirmed to
+fail without its fix.
 
-**Implement:** A CNN encoder and separate categorical heads. At time t, the posterior receives the current recurrent state and encoded image; the prior receives the current recurrent state. Implement straight-through categorical sampling, uniform mixing, stable log probabilities, and explicit aggregation over factors. Follow the pinned algorithm mapping from M0.
+**Deliverable:** `src/dreamer/{nets,distributions,rssm}.py`; observation and prediction APIs; the
+measured parameter count.
 
-Expose two paths: an observation-conditioned update for real experience, and a prior-only update for prediction. Define the complete model state as the concatenation of deterministic and stochastic features.
-
-**Validation gate:** Probabilities normalize and sampled factors are valid one-hot values. The sampling estimator carries gradients to logits. Altering the image changes the posterior; the prior-only API has no image input. Empirical samples agree with a small known categorical distribution within sampling tolerance.
-
-**Deliverable:** Observation and prediction APIs plus latent entropy diagnostics.
+> **Status 2026-09-18: PASSED.** 12/12 unit tests, plus `scripts/m2m3_gate.py` driving the RSSM from
+> a real Walker replay batch on the GPU — 12/12, artifact
+> [`results/m2m3/gate-2026-09-18.txt`](../results/m2m3/gate-2026-09-18.txt). Measured parameter count
+> **391,008** (`dyn` 376,704 + `enc` 14,304), equal to the §4.11 derivation to the digit:
+> [`results/m2m3/param-count-measured-2026-09-18.txt`](../results/m2m3/param-count-measured-2026-09-18.txt).
+> **No deviation from the specification.** M4 may start.
 
 ## M4 — World-model heads and training objective
 

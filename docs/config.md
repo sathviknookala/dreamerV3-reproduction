@@ -100,6 +100,7 @@ hypothesis rather than an open question.
 
 **~0.69M derived from the specification, not measured** —
 [`results/m0/param-count-derived-2026-09-17.txt`](../results/m0/param-count-derived-2026-09-17.txt).
-Below the preset's name and far below the paper's smallest evaluated row of 12M. The measured count
-is deferred to M3–M4 ([spec.md §10-7](spec.md)) and must come from `sum(p.numel())` over
-instantiated modules.
+Below the preset's name and far below the paper's smallest evaluated row of 12M. **The RSSM and
+encoder halves are now measured** — 391,008, equal to their derived figures
+([`results/m2m3/param-count-measured-2026-09-18.txt`](../results/m2m3/param-count-measured-2026-09-18.txt));
+the decoder and heads are still owed at M4 ([spec.md §10-7](spec.md)).

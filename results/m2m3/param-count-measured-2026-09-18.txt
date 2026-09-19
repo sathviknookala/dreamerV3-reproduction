@@ -1,0 +1,49 @@
+# MEASURED parameter count, instantiated PyTorch modules
+# walker_walk, A=6, size1m + dmc_vision; torch 2.13.0+cu129
+#
+module                    measured   derived   delta
+dyn                         376704    376704       0
+enc                          14304     14304       0
+TOTAL                       391008    391008       0
+
+enc/convs.0.weight                        (8, 3, 5, 5)       600
+enc/convs.0.bias                                  (8,)         8
+enc/convs.1.weight                       (12, 8, 5, 5)      2400
+enc/convs.1.bias                                 (12,)        12
+enc/convs.2.weight                      (16, 12, 5, 5)      4800
+enc/convs.2.bias                                 (16,)        16
+enc/convs.3.weight                      (16, 16, 5, 5)      6400
+enc/convs.3.bias                                 (16,)        16
+enc/norms.0.scale                                 (8,)         8
+enc/norms.1.scale                                (12,)        12
+enc/norms.2.scale                                (16,)        16
+enc/norms.3.scale                                (16,)        16
+dyn/dynin0.weight                            (64, 512)     32768
+dyn/dynin0.bias                                  (64,)        64
+dyn/dynin1.weight                            (64, 128)      8192
+dyn/dynin1.bias                                  (64,)        64
+dyn/dynin2.weight                              (64, 6)       384
+dyn/dynin2.bias                                  (64,)        64
+dyn/dynin0norm.scale                             (64,)        64
+dyn/dynin1norm.scale                             (64,)        64
+dyn/dynin2norm.scale                             (64,)        64
+dyn/dynhid0.kernel                        (8, 256, 64)    131072
+dyn/dynhid0.bias                                (512,)       512
+dyn/dynhid0norm.scale                           (512,)       512
+dyn/dyngru.kernel                         (8, 64, 192)     98304
+dyn/dyngru.bias                                (1536,)      1536
+dyn/obs0.weight                              (64, 768)     49152
+dyn/obs0.bias                                    (64,)        64
+dyn/obs0norm.scale                               (64,)        64
+dyn/obslogit.weight                          (128, 64)      8192
+dyn/obslogit.bias                               (128,)       128
+dyn/prior0.weight                            (64, 512)     32768
+dyn/prior0.bias                                  (64,)        64
+dyn/prior0norm.scale                             (64,)        64
+dyn/prior1.weight                             (64, 64)      4096
+dyn/prior1.bias                                  (64,)        64
+dyn/prior1norm.scale                             (64,)        64
+dyn/priorlogit.weight                        (128, 64)      8192
+dyn/priorlogit.bias                             (128,)       128
+
+PASS - measured == derived
