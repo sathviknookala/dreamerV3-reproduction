@@ -1,0 +1,84 @@
+device: cuda  torch: 2.13.0+cu129
+
+heads perturbed: outscale 0.0 reads out exactly 0 for every latent, so imagined rewards
+      would be identically 0 and every gradient-routing claim below would hold vacuously
+      (dL/dfeat = dL/dlogits @ 0 = 0). Reward and value magnitudes here are those of
+      random heads and mean nothing.
+
+## parameter count (measured)
+  val       66111  derived    66111  delta    0
+  slowval   66111  (excluded from the optimizer, untrained)
+PASS  val closes the 4.11 derivation  — 66111
+PASS  the slow mirror is excluded from trainable_parameters  — 66111
+PASS  world model + val = 636,530
+
+## posterior context pass and imagination starts
+PASS  1024 starts from the 1104 candidate positions  — 1024
+PASS  the index addresses the (B, P+T) grid, not (B, T)
+PASS  the largest index needs the full grid  — 1103
+
+## imagined critic — weight 1.0
+PASS  ret is (N, H)  — (1024, 15)
+PASS  the weight slice is weight[:, :-1]
+PASS  the target is detached
+PASS  ret and loss are finite
+PASS  the imagined bootstrap is the FAST critic
+PASS  fast and slow are genuinely separated here  — 5.369e+06
+  value_mae 2.127e+07   weight_mean 0.2146
+
+## replay critic — weight 0.3
+PASS  burn-in columns are never filled
+PASS  no bootstrap hole at a non-terminal position
+PASS  replay ret is (B, T-1)  — (16, 63)
+PASS  the replay denominator is B*(T-1) = 1008  — 1008.0
+PASS  replay ret and loss are finite
+PASS  the replay features are NOT detached
+  value_mae 2.26e+07   target_mean -2.242e+07
+PASS  total = 1.0*value + 0.3*repval
+
+## gradient routing (spec 5.9, 6.3)
+PASS  value reaches the critic
+PASS  value does not reach the encoder
+PASS  value does not reach the RSSM
+PASS  value does not reach the slow mirror
+PASS  repval reaches the encoder
+PASS  repval reaches the RSSM
+PASS  repval reaches the critic
+PASS  repval does not reach the decoder
+PASS  repval does not reach the slow mirror
+
+## the two silent readings of gamma (spec 5.4)
+  correct 14.688751   double-counted 14.386389   dropped 15.000000
+PASS  correct matches the closed form  — 14.688751
+PASS  double-counting matches its own closed form
+PASS  the three readings are separated
+
+## transform order (spec 5.5) — recorded, not asserted about return
+  v2 readout  sum(p_i b_i)          = 47.6240   (this implementation)
+  v1 readout  symexp(sum p_i symlog_bins) would read ~9.05 on the same distribution
+PASS  the readout is the expectation, no outer symexp  — 47.6240
+PASS  the zero-init readout is exactly 0
+
+## critic fitting on fixed targets (300 LaProp steps)
+  targets: discounted real-reward sums, range [0.011, 3.185]
+   step        loss    value_mean   target_mean     value_mae      slow_gap
+      0     11.0825             0        0.4029        0.4029             0
+     30      4.0997        0.1711        0.4029        0.2502        0.1592
+     60      2.8610        0.2246        0.4029        0.2139        0.1111
+     90      2.3989         0.344        0.4029        0.1692        0.0606
+    120      2.1404         0.374        0.4029        0.1688        0.0295
+    150      1.8544        0.3813        0.4029         0.154        0.0208
+    180      1.6488        0.3855        0.4029        0.1227        0.0476
+    210      1.5179        0.3864        0.4029        0.0976        0.0561
+    240      1.4355        0.3839        0.4029        0.0771        0.0578
+    270      1.3759          0.39        0.4029        0.0657          0.05
+    299      1.3121        0.3907        0.4029        0.0538        0.0409
+PASS  value error falls materially  — 0.4029 -> 0.0538
+PASS  the world model is bitwise unchanged
+PASS  the slow critic trails rather than tracks
+
+  peak VRAM, posterior + 1024 imagined rollouts at H=15 + both critic losses: 1259.5 MiB
+
+wrote results/m7/value-vs-target-2026-09-18.csv
+
+ALL CHECKS PASSED

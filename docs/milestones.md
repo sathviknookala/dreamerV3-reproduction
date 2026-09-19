@@ -18,12 +18,14 @@ configuration are recorded** — not when the code runs.
 | **M4** | **CLOSED 2026-09-18.** Gate passed: 11/11 unit tests, 15/15 real-batch GPU gate, fixed subset overfit, parameter count closes the derivation exactly. |
 | **M5** | **CLOSED 2026-09-18.** Gate passed 26/26 on a trained world model and a held-out split. Evidence: [`results/m5/`](../results/m5/). |
 | **M6** | **CLOSED 2026-09-18.** Gate passed 55/55 plus 29 unit tests. Evidence: [`results/m6/`](../results/m6/). |
-| **M7** | **ACTIVE.** Next milestone. |
-| M8–M10 | Not started. |
+| **M7** | **CLOSED 2026-09-18.** Gate passed 37/37 plus 39 unit tests. Evidence: [`results/m7/`](../results/m7/). |
+| **M8** | **ACTIVE.** Next milestone. |
+| M9–M10 | Not started. |
 
-The environment contract, the RSSM state-transition core, the full world-model objective and the
-imagination engine are `implemented` and `validated`; the actor and critic are still only
-`specified` — see the status legend in [spec.md §11](spec.md).
+The environment contract, the RSSM state-transition core, the full world-model objective, the
+imagination engine and the critic with its return targets are `implemented` and `validated`; the
+actor is the last component still only `specified` — see the status legend in
+[spec.md §11](spec.md).
 
 ---
 
@@ -265,6 +267,34 @@ Use the random action provider from M6 for initial integration. Start with hand-
 **Validation gate:** Return calculations match manually derived examples for zero rewards, constant rewards, early termination, and horizon bootstrapping. λ endpoints behave as intended. Critic targets are detached appropriately. Critic fitting reduces error on fixed targets without updating the actor or world model accidentally.
 
 **Deliverable:** Verified return calculations, critic training, and value-versus-target diagnostics.
+
+> **Status 2026-09-18: PASSED.** `tests/test_critic.py` 39/39 and `scripts/m7_gate.py` **37/37** on a
+> real Walker replay batch on the GPU — [`results/m7/gate-2026-09-18.txt`](../results/m7/gate-2026-09-18.txt).
+> Full record and limits: [`results/m7/README.md`](../results/m7/README.md).
+>
+> **The return arithmetic is pinned to hand-computed values.** All six §6.1 fixtures hold, each
+> failing if the bootstrap moves to `v[t]`. The §5.4 γ-location trap is separated numerically:
+> constant reward, λ=1, H=15 gives **correct 14.688751**, γ double-counted 14.386389, γ dropped
+> 15.000000 — three values from exact arithmetic, all three of which train without raising.
+> Measured `val` **66,111**, equal to the §4.11 derivation; world model + `val` = 636,530, with
+> `pol` 50,316 still derived and owed at M8.
+>
+> **Critic fitting works from the real starting condition.** 300 LaProp steps on fixed discounted
+> real-reward targets (mean 0.4029): value **0.0000 → 0.3907**, MAE 0.4029 → 0.0538, world-model
+> parameters bitwise unchanged ([`value-vs-target-2026-09-18.csv`](../results/m7/value-vs-target-2026-09-18.csv)).
+>
+> **Fifteen mutants were each confirmed to fail.** Two survived the first suite — "slow critic as the
+> bootstrap" and "`slowreg` dropped" — because the `outscale: 0.0` readout makes fast and slow
+> identical at exactly 0. This is the same hazard already recorded for the reward head, and it
+> recurs for **every** assertion about the critic: tests that perturb the fast head were added until
+> both mutants failed.
+>
+> **No deviation from the specification.** Two things the M7 text does not name. The replay
+> bootstrap scatter addresses the **(B, P+T)** grid, because `select_start_states` builds its mask
+> from `loss_mask` of shape (B, P+T) — its index runs to 1103, not 1023. And a zero hole in that
+> bootstrap corrupts **every earlier** target through the backward recursion, which the position
+> weight does not mask; holes are safe only because the drop criterion is `is_terminal`, where
+> `live` is exactly zero. `check_bootstrap_holes` enforces that rather than assuming it.
 
 ## M8 — Actor and imagined behavior learning
 
