@@ -1,4 +1,13 @@
 from .collector import Collector, UniformRandomPolicy
+from .critic import (
+    Critic,
+    CriticOutput,
+    SlowCritic,
+    ValueHead,
+    check_bootstrap_holes,
+    lambda_return,
+    scatter_imagined_return,
+)
 from .distributions import (
     categorical_entropy,
     straight_through_sample,
@@ -59,6 +68,13 @@ from .world_model import WorldModel, WorldModelOutput, batch_to_tensors
 
 __all__ = [
     "ActionProvider",
+    "Critic",
+    "CriticOutput",
+    "SlowCritic",
+    "ValueHead",
+    "check_bootstrap_holes",
+    "lambda_return",
+    "scatter_imagined_return",
     "Context",
     "Imagination",
     "RandomActionProvider",

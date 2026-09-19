@@ -1,0 +1,15 @@
+# MEASURED parameter count, instantiated PyTorch critic
+# walker_walk, A=6, size1m + dmc_vision; torch 2.13.0+cu129
+#
+module        measured   derived   delta
+val              66111     66111       0
+slowval          66111     66111       0   (untrained, excluded from the optimizer)
+
+world model       570419   (measured at M4)
+world + val       636530
+agent total       686846   with pol 50,316 still DERIVED, owed at M8
+
+# spec 4.11 total, excluding the slowval mirror: 686,846
+# still derived, not measured: pol (50,316)
+
+PASS  val and its mirror both equal the derivation
