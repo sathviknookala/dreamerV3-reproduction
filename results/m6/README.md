@@ -82,7 +82,8 @@ the form M5 used and the form that catches it.
 ## What this milestone cannot claim
 
 Nothing about behaviour, return, or prediction quality. The model is untrained, the actions are
-random, and there is no actor, critic or λ-return. The imagined rewards and continuations are the
+random, and at M6 there was no actor, critic or λ-return (the critic arrived at M7; the actor is
+still M8's). The imagined rewards and continuations are the
 outputs of an untrained head over an untrained prior — the gate tests that they are *correctly
 placed and finite*, not that they are *right*. M5's held-out prediction numbers remain the only
 evidence that the prior predicts anything, and they describe a uniform-random data distribution.

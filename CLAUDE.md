@@ -168,9 +168,10 @@ n=3 are all reportable outcomes; a null result with clear measurement and stated
 valid deliverable. Stating a direction now would only create pressure to find it.
 
 **What it cannot claim.** Absolute returns and runtime: **TBD — no run exists.** The parameter count
-is **derived** at ~0.69M from the specification ([results/m0/](results/m0/)) but **not measured**;
-`sum(p.numel())` over the world model is **measured at 570,419** and matches the derivation per
-module ([results/m4/](results/m4/)); with `pol` and `val` it closes at 686,846. Owed at M7–M8.
+is **derived** at ~0.69M from the specification ([results/m0/](results/m0/)); `sum(p.numel())` over
+the world model is **measured at 570,419** ([results/m4/](results/m4/)) and `val` at **66,111**
+([results/m7/](results/m7/)), each matching the derivation per module, for a measured 636,530. Only
+`pol` (50,316) is still derived; with it the total closes at 686,846. Owed at M8.
 Structurally, two tasks do not establish the paper's cross-domain result. Three training seeds give
 limited evidence about variability, and additional evaluation episodes do not create additional
 independent training runs. The horizon comparison holds **real data** fixed, not compute — longer

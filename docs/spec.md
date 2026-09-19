@@ -655,9 +655,9 @@ the `slowval` mirror (66,111 more, untrained), optimizer state, and return-norm 
 > independently of the source-tracing pass and agreed with it to the digit, which is evidence the
 > shape table is **complete and self-consistent** — not evidence that any code is correct.
 > §10-7 requires `sum(p.numel())` over instantiated modules. **Discharged for `dyn` and `enc` at
-> M2+M3 and for `dec`, `rew` and `con` at M4** — every figure in this table reproduced exactly from
-> real modules, which is evidence that the §4.1–§4.5 and §4.9 shape, bias and `outscale` rules were
-> transcribed correctly. Only `pol` and `val` remain, at M7–M8.
+> M2+M3, for `dec`, `rew` and `con` at M4, and for `val` at M7** — every figure in this table
+> reproduced exactly from real modules, which is evidence that the §4.1–§4.5, §4.7 and §4.9 shape,
+> bias and `outscale` rules were transcribed correctly. Only `pol` remains, at M8.
 >
 > **The name `size1m` remains not evidence of any count.** The derived figure is ~0.69M, below the
 > preset's name and far below the paper's smallest evaluated row of 12M.
