@@ -26,6 +26,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
+| [results/m2m3/](results/m2m3/) | Before quoting a parameter count or touching the RSSM. The M2+M3 gate output and the measured `sum(p.numel())` against the §4.11 derivation. |
 | [results/m1/](results/m1/) | Environment and compute verification: the two check suites, their outputs, and the captured manifest. Re-run them after any dependency change. |
 
 The original `dreamerv3_implementation_plan.md` was split into the four docs above; it is preserved
@@ -164,7 +165,8 @@ valid deliverable. Stating a direction now would only create pressure to find it
 
 **What it cannot claim.** Absolute returns and runtime: **TBD — no run exists.** The parameter count
 is **derived** at ~0.69M from the specification ([results/m0/](results/m0/)) but **not measured**;
-`sum(p.numel())` over real modules is owed at M3–M4.
+`sum(p.numel())` over the RSSM and encoder is **measured at 391,008** and matches the derivation
+([results/m2m3/](results/m2m3/)); the decoder and heads are owed at M4.
 Structurally, two tasks do not establish the paper's cross-domain result. Three training seeds give
 limited evidence about variability, and additional evaluation episodes do not create additional
 independent training runs. The horizon comparison holds **real data** fixed, not compute — longer
@@ -216,14 +218,18 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (13) and the M1 replay smoke test (14 checks on a real Walker episode), verbatim:
+- Unit tests (25), the M1 replay smoke test (14 checks), and the M2+M3 GPU gate (12 checks), verbatim:
 
   ```bash
-  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector
+  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm
   ```
 
   ```bash
   .venv/bin/python scripts/m1_replay_smoke.py
+  ```
+
+  ```bash
+  .venv/bin/python scripts/m2m3_gate.py
   ```
 - A test that passes where the bug cannot occur is not a test — confirm it fails without its fix
 - **Domain testing hazards for this project** (each is a validation gate that a naive assertion
@@ -250,7 +256,7 @@ training settings are context only, never the comparison.
   - **TF32 breaks hand-computed fixtures.** Measured on this GPU: max|GPU−CPU| on a 2048² fp32
     matmul is **6.8e-02 with TF32 on** and **1.3e-04 off** — a 500× difference. Set
     `torch.backends.cuda.matmul.allow_tf32 = False` and `torch.backends.cudnn.allow_tf32 = False`
-    in any test asserting against analytic values (M2, M7).
+    in any test asserting against analytic values (M2+M3, M7). `tests/test_rssm.py` sets both.
 - Ask: "Would a senior engineer approve this?"
 - Before quoting a committed number, check the tree still reproduces it
 
@@ -288,7 +294,7 @@ training settings are context only, never the comparison.
 No code exists yet, so there are no observed conventions to record — the code will be the style
 guide. Two rules are already forced by the spec and should hold from the first file:
 
-- **State the shape contract at every module boundary.** The M2 and M3 gates test shape, layout, and
+- **State the shape contract at every module boundary.** The M2+M3 gate tests shape, layout, and
   reset semantics directly; an implicit `(B, T, ...)` vs `(T, B, ...)` convention is the most likely
   source of a silent temporal misalignment.
 - **Every `detach()` / stop-gradient placement gets a one-line comment saying *why*.** The M4, M7,
@@ -300,56 +306,55 @@ code already says creates drift.
 
 ## Current Focus
 
-**M2 — deterministic recurrent transition.** M0 closed 2026-09-17; **M1 is structurally complete as
-of 2026-09-18** and M2 may start. `src/dreamer/` implements the §7 environment, transition, collector
-and sequence-replay contracts; 40/40 environment checks, 13/13 unit tests, and 14/14 real-data replay
-smoke checks pass. What remains is that **no model code exists** — the RSSM, encoder, heads, actor
-and critic are all still only specified.
+**M4 — world-model heads and training objective.** M0 closed 2026-09-17; M1 and the merged **M2+M3**
+both closed 2026-09-18. The RSSM state-transition core is `implemented` and `validated`:
+`src/dreamer/{nets,distributions,rssm}.py` realize §4.1, §4.2, §4.4, §4.8 and §4.9, and the measured
+parameter count **391,008** equals the derivation to the digit ([results/m2m3/](results/m2m3/)).
 
-The §7.5 sequence contract is now stated unambiguously and matches the implementation: `P = 5`
-burn-in transitions are **extra** context, `T = 64` is loss-bearing, so a sample is **69 transitions
-and 70 observations**, and `train_position = B × T = 1024` per gradient step. `B × (T − P)` was wrong
-wherever it appeared and no longer appears.
+**M2 and M3 are now one milestone with one gate** ([milestones.md](docs/milestones.md)). They share
+one object — there is no useful recurrence without a stochastic state to carry — and M2's own text
+conceded it by allowing synthetic stochastic states. Do not restore the split.
 
-Working environment: `.venv`, **Python 3.12.11**, torch **2.13.0+cu129** with `sm_120`, mujoco
-3.13.0, dm-control 1.0.46. Pins in [requirements.txt](requirements.txt).
+What exists: block-diagonal recurrence, CNN encoder, posterior, prior, straight-through categorical
+sampling with unimix, single-step and sequence APIs, reset masks, and `observe_replay_batch` wired
+directly to the M1 `SequenceBatch`. What does not: **decoder, reward head, continuation head, actor,
+critic, and every objective.**
 
 Next, in order:
 
-1. M2: the block-diagonal GRU with 8 blocks ([spec.md §4.1](docs/spec.md)) — single-step and sequence
-   interfaces, reset masks, layouts, initialization.
-2. The M2 gate: single-step vs sequence agreement on identical inputs, reset isolation across batch
-   elements, finite gradients. Set `allow_tf32 = False` in any test asserting against hand-computed
-   values.
-3. Guard the four documented transcription traps as the code that can hit them lands — the gate
-   split, the `BlockLinear` fan-in, `sg(…, skip=)` polarity, the image-scaling asymmetry.
+1. M4: the decoder (§4.3 — note the channel asymmetry and the `/255` target with **no** shift), the
+   reward and continuation heads (§4.5), and `symexp_twohot` (§5.5).
+2. The world-model loss (§5.2, §5.3): KL summed over the 32 factors **before** free bits, free bits
+   = 1 nat for the whole latent, reconstruction summed over pixels and meaned over positions.
+3. Target alignment. `observe_sequence` returns `L+1` states for `L` transitions and deliberately
+   does **not** slice them — which state supervises which target is an M4 decision (§7.4).
+4. Measure `sum(p.numel())` for `dec`, `rew`, `con` to finish §10-7.
 
 **Deferred from M1 by decision, not blocked:** random-policy return floor, throughput benchmark, and
-random-policy video. They measure a fixed environment, reproduce from committed code at any time, and
-nothing before M10 reads them; scripts are written and wait for the M9 measurement pass.
+random-policy video. Scripts are written; they run in the M9 measurement pass.
 
-`Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing of this project has been
-profiled.
+`Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing has been profiled.
 
 ## Last Session
 
-**Session 5 — closed M1: disambiguated the sequence contract and validated replay on real data.**
+**Session 6 — implemented and validated the RSSM core as a single merged M2+M3 milestone.**
 
-- **Fixed the `B × (T − P)` error in the spec.** Three places implied `T` was inclusive of the
-  burn-in, which would have made a "length 64" batch carry only 59 loss-bearing positions and
-  understated `train_position` by 8%. [spec.md §7.5](docs/spec.md) now carries an explicit contract
-  table; §7.6 and §7.7 were corrected to `B × T`. The implementation was already right
-  (`sequence_length = burn_in + train_length`), so this was documentation catching up to code.
-- **Ran the full collect→replay path on a real Walker episode: 14/14.** 1000 steps through `DMCEnv`,
-  `Collector`, `UniformRandomPolicy`, `ReplayBuffer`; one `B=16, P=5, T=64` sample verified for
-  `(16,70,64,64,3)` uint8 observations, `(16,69,6)` actions, `(16,69)` targets, exactly 5 masked and
-  64 loss-bearing positions per sequence, 1024 `train_position`, no cross-episode window, and finite
-  in-bounds values. `scripts/m1_replay_smoke.py`.
-- **Deliberately did not run the random-policy floor, throughput benchmark, or video.** They are
-  empirical reporting on a fixed environment with no downstream consumer before M10; deferred to the
-  M9 measurement pass rather than spent now. Recorded as a decision in
-  [milestones.md](docs/milestones.md), not as an omission.
-- **Recorded the test commands in this file** — they did not exist at last session's close.
+- **Merged M2 and M3 into one milestone with one 12-test gate.** Separate gates would have tested the
+  recurrence twice, once against the placeholder stochastic state M2 explicitly permitted. All
+  original M2 and M3 gate items are preserved; the merge is recorded in
+  [milestones.md](docs/milestones.md).
+- **Three transcription hazards were caught by testing, not by reading.** The first nine invariants
+  passed unchanged against a flat gate split *and* against a per-block `BlockLinear` fan-in — both
+  exactly as predicted: silently wrong, still trainable. Added gate-index-map and fan-in assertions
+  and confirmed each fails without its fix. A third was a real bug in my own code: `sg(onehot) +
+  probs - sg(probs)` associates left and rounds `1 + 0.0025 - 0.0025` off the one-hot in fp32;
+  §5.1's parenthesization `sg(onehot) + (probs - sg(probs))` is exact and is load-bearing.
+- **Measured parameter count matches the derivation exactly: `dyn` 376,704, `enc` 14,304, total
+  391,008** — first instantiation, no adjustment. Independent evidence that §4's shape, bias and
+  fan-in rules were transcribed correctly. §10-7 is discharged for these two modules.
+- **Ran the gate on a real Walker replay batch on the GPU: 12/12.** `B=16, P=5, T=64` from the M1
+  collector through `observe_replay_batch`, peak 830.7 MiB for one forward+backward.
+- **No deviation from the specification.** Nothing in §4 was changed, substituted or approximated.
 
 ## Known Issues
 
@@ -360,22 +365,23 @@ profiled.
   the environment — `uv venv --seed` does, and pip does the installs.
 - **`pytest` is not installed; the suite is `unittest` and needs `PYTHONPATH=src:tests`.** The package
   is not installed into the venv, and `unittest discover` fails because `tests/` has no `__init__.py`
-  — name the three modules explicitly, as in the recorded command.
+  — name the four modules explicitly, as in the recorded command.
+- **A `torch.Generator` must be created on the same device as the model.** Passing a CPU generator to
+  a CUDA `RSSM` raises at `torch.multinomial`. Seeded sampling therefore needs
+  `torch.Generator(device=device)`; §8.1's stream separation must respect this.
 - **torch must come from the `cu129` index, not PyPI.** The GPU is Blackwell `sm_120` and the driver
   is 575.64.03; CUDA 13.0 wheels need driver ≥ 580, so the newest PyPI default build is excluded.
-- **`size1m` is ~0.69M parameters by derivation, not 1M, and the figure is not measured.** It is also
-  below the paper's smallest evaluated row (12M), so no result can be compared to a published number.
-  The measured count is owed at M3–M4 from `sum(p.numel())`.
-- **Specification is not implementation.** [spec.md §11](docs/spec.md) tracks the three axes. The
-  *environment* is `validated` and the M1 data path is now `implemented`; the *architecture* is still
-  only `specified` and **no model code exists**.
-- **Four transcription traps are documented but unguarded** — the block-GRU gate split, the
-  `BlockLinear` fan-in (2.83× init error if done per-block), the reference's inverted `sg(…, skip=)`
-  polarity, and the encoder/decoder image-scaling asymmetry. None is reachable yet; each becomes
-  live with the M2–M4 code and must be guarded as it lands.
-- **No measurement of any model exists.** `results/m0/` holds derivations, `results/m1/` holds
-  toolchain checks. No return, parameter count, VRAM figure or timing of this project's model exists
-  anywhere. The random-policy floor is also **not yet measured** — deferred, see Current Focus.
+- **`size1m` is 391,008 parameters for RSSM + encoder and ~0.69M for the full agent by derivation.**
+  Below the preset's name and far below the paper's smallest evaluated row (12M), so no result can be
+  compared to a published number. The full-agent figure is still derived, not measured.
+- **Two of the four transcription traps are now guarded; two are not.** The gate split and the
+  `BlockLinear` fan-in have dedicated mutation-verified tests. The reference's inverted
+  `sg(…, skip=)` polarity and the encoder/decoder image-scaling asymmetry become reachable **at M4**,
+  when the decoder lands, and must be guarded as it lands — the encoder's `/255 − 0.5` is
+  implemented, its `/255`-with-no-shift counterpart is not.
+- **No measurement of a trained model exists.** `results/m0/` holds derivations, `results/m1/`
+  toolchain checks, `results/m2m3/` a parameter count and a gate. No return, no training timing, no
+  steady-state VRAM. The random-policy floor is **not yet measured** — deferred, see Current Focus.
 
 ---
 
