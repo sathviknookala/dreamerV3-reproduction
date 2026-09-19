@@ -24,7 +24,8 @@ results/
 - **Before re-quoting a committed number, check the tree still reproduces it.**
 - Figures regenerate from raw logs. If a figure cannot be regenerated, it is not a result.
 
-Measured so far: environment and compute checks ([`m1/`](m1/)), and the RSSM + encoder parameter
-count with its gate evidence ([`m2m3/`](m2m3/)). No return, timing or VRAM figure for a *training
+Measured so far: environment and compute checks ([`m1/`](m1/)), the RSSM + encoder parameter count
+([`m2m3/`](m2m3/)), and the world-model parameter count, objective gate and fixed-subset overfit
+([`m4/`](m4/)). No return, timing or VRAM figure for a *training
 run* exists; the random-policy floor and environment throughput are deferred to the M9 measurement
 pass.
