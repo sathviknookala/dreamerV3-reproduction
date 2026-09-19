@@ -63,6 +63,10 @@ class ReplayBuffer:
     def num_complete_episodes(self) -> int:
         return len(self._episodes)
 
+    @property
+    def complete_episodes(self) -> tuple[_Episode, ...]:
+        return tuple(self._episodes)
+
     def add(self, transition: Transition) -> None:
         observation = self._validate_image(
             transition.observation,
