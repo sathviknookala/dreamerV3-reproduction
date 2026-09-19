@@ -1,0 +1,79 @@
+device: cuda  torch: 2.13.0+cu129
+reward head perturbed: outscale 0.0 reads out exactly 0 for every latent, so
+      alignment and action sensitivity would pass vacuously. Reward magnitudes below
+      are those of a random head and mean nothing.
+
+## posterior context pass
+PASS  posterior covers P+T+1 positions  — (16, 70, 512)
+  start states: 1024 of 1104 candidate positions
+PASS  every loss-bearing non-terminal position is a start  — 1024
+PASS  starts are a flat batch
+PASS  burn-in positions are excluded
+PASS  terminal positions are excluded
+PASS  start states are finite
+
+## per-horizon rollouts
+PASS  H=5: no encoder call during imagination  — []
+PASS  H=5: no simulator step during imagination
+PASS  H=5: H+1 states  — (1024, 6, 512)
+PASS  H=5: H actions  — (1024, 5, 6)
+PASS  H=5: H rewards and H continuations
+PASS  H=5: H+1 weights  — (1024, 6)
+PASS  H=5: state 0 is the replay start
+PASS  H=5: outputs finite
+PASS  H=5: weight[0] is the start continuation
+PASS  H=5: weight is the cumulative product of the continuations
+PASS  H=5: continuations are probabilities
+PASS  H=5: imagined trajectory carries no world-model gradient
+PASS  H=5: no image is decoded
+  H= 5  1024 rollouts    6144 states       3.8 ms/batch   0.613 us/state  peak   203.7 MiB
+PASS  H=15: no encoder call during imagination  — []
+PASS  H=15: no simulator step during imagination
+PASS  H=15: H+1 states  — (1024, 16, 512)
+PASS  H=15: H actions  — (1024, 15, 6)
+PASS  H=15: H rewards and H continuations
+PASS  H=15: H+1 weights  — (1024, 16)
+PASS  H=15: state 0 is the replay start
+PASS  H=15: outputs finite
+PASS  H=15: weight[0] is the start continuation
+PASS  H=15: weight is the cumulative product of the continuations
+PASS  H=15: continuations are probabilities
+PASS  H=15: imagined trajectory carries no world-model gradient
+PASS  H=15: no image is decoded
+  H=15  1024 rollouts   16384 states      10.6 ms/batch   0.647 us/state  peak   463.2 MiB
+PASS  H=30: no encoder call during imagination  — []
+PASS  H=30: no simulator step during imagination
+PASS  H=30: H+1 states  — (1024, 31, 512)
+PASS  H=30: H actions  — (1024, 30, 6)
+PASS  H=30: H rewards and H continuations
+PASS  H=30: H+1 weights  — (1024, 31)
+PASS  H=30: state 0 is the replay start
+PASS  H=30: outputs finite
+PASS  H=30: weight[0] is the start continuation
+PASS  H=30: weight is the cumulative product of the continuations
+PASS  H=30: continuations are probabilities
+PASS  H=30: imagined trajectory carries no world-model gradient
+PASS  H=30: no image is decoded
+  H=30  1024 rollouts   31744 states      20.9 ms/batch   0.658 us/state  peak   858.3 MiB
+
+## reuse of the M5 prior-only path
+PASS  a scripted provider reproduces RSSM.imagine exactly
+PASS  the scripted actions are returned verbatim
+
+## action sensitivity
+  max|deter| gap 0.3362   max|reward| gap 192032032.0000
+PASS  opposite actions change the imagined states  — 0.3362
+PASS  opposite actions change the predicted rewards  — 1.92e+08
+
+## decoding is available for inspection only
+PASS  decode=True returns H+1 frames  — (4, 6, 64, 64, 3)
+PASS  decoded frames are finite and in [0, 1]
+
+## gradient routing
+PASS  the reward head receives gradient
+PASS  the RSSM receives none through imagination
+PASS  the encoder receives none through imagination
+
+wrote results/m6/horizon-cost-2026-09-18.csv
+
+ALL CHECKS PASSED

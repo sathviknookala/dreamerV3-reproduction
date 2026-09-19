@@ -7,6 +7,16 @@ from .distributions import (
 )
 from .env import DMCEnv
 from .heads import ContinuationHead, Decoder, MLPHead, RewardHead
+from .imagine import (
+    ActionProvider,
+    Imagination,
+    RandomActionProvider,
+    SequenceActionProvider,
+    imagine_trajectory,
+    select_start_states,
+    trajectory_weight,
+    valid_start_mask,
+)
 from .nets import BlockLinear, Conv2d, Linear, RMSNorm
 from .openloop import (
     Context,
@@ -48,7 +58,15 @@ from .viz import paired_filmstrip, write_png
 from .world_model import WorldModel, WorldModelOutput, batch_to_tensors
 
 __all__ = [
+    "ActionProvider",
     "Context",
+    "Imagination",
+    "RandomActionProvider",
+    "SequenceActionProvider",
+    "imagine_trajectory",
+    "select_start_states",
+    "trajectory_weight",
+    "valid_start_mask",
     "Episode",
     "OpenLoopMetrics",
     "OpenLoopPrediction",

@@ -42,6 +42,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
+| [results/m6/](results/m6/) | Before quoting an imagination cost or touching the rollout path. The M6 gate, the per-horizon cost/memory table, and what those numbers exclude. |
 | [results/m5/](results/m5/) | Before quoting an open-loop number, a training-run cost, or touching the prediction path. The M5 gate, the open-loop reward-MAE curve against both baselines, and the paired filmstrips. |
 | [results/m4/](results/m4/) | Before quoting a parameter count, a loss value, or touching the world model. The M4 gate, the overfit curve, and the measured world-model `sum(p.numel())`. |
 | [results/m2m3/](results/m2m3/) | Before touching the RSSM. The M2+M3 gate output and the measured RSSM + encoder parameter count. |
@@ -236,11 +237,11 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (58), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15) and the
-  M5 gate (26), verbatim:
+- Unit tests (87), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
+  M5 gate (26) and the M6 gate (55), verbatim:
 
   ```bash
-  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim
+  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim test_imagine
   ```
 
   ```bash
@@ -253,6 +254,10 @@ training settings are context only, never the comparison.
 
   ```bash
   .venv/bin/python scripts/m4_gate.py
+  ```
+
+  ```bash
+  .venv/bin/python scripts/m6_gate.py
   ```
 
   The M5 gate needs the collected split and the trained checkpoint, neither of which is committed
@@ -283,6 +288,10 @@ training settings are context only, never the comparison.
     the value is 0, not that it is small.
   - **Encoder scales `x/255 − 0.5`; the decoder target is `x/255` with no shift.** The asymmetry is
     real. A test that only checks output range passes either way.
+  - **A structural no-observation check must test substrings, not a name set.** A
+    `future_observations` argument added to `imagine_trajectory` survived a check that compared
+    parameter names against `{"observation", "observations", "image", "embed"}`, because it equals
+    none of them. Assert that no parameter name *contains* `observ`/`image`/`frame`/`embed`.
   - **A leaking open-loop rollout needs two different detectors.** An `open_loop_predict` that
     accepts a `future_observations` argument is caught by the encoder tripwire and the signature
     check but **not** by the frame-corruption check; a `gather_contexts` that slides one future frame
@@ -341,60 +350,58 @@ code already says creates drift.
 
 ## Current Focus
 
-**M6 — latent imagination engine.** M0 closed 2026-09-17; M1, the merged **M2+M3**, **M4** and **M5**
-all closed 2026-09-18. The world model is `implemented` and `validated`, and it is now also
-**demonstrated to predict**: open-loop reward MAE on held-out episodes beats the training-set-mean
-predictor at every distance 1–30 and overtakes last-reward persistence at k=5
-([results/m5/](results/m5/)).
+**M7 — critic and return targets.** M0 closed 2026-09-17; M1, the merged **M2+M3**, **M4**, **M5**
+and **M6** all closed 2026-09-18. The world model is `implemented`, `validated` and demonstrated to
+predict ([results/m5/](results/m5/)); the **imagination engine is now `validated` too**
+([results/m6/](results/m6/)).
 
-What exists: the full world-model training path, `LaProp` (now gate-tested), the episode-split
-dataset, and the prior-only open-loop rollout with its evaluation and baselines. What does not:
-**actor, critic, λ-returns, and the online loop.**
+What exists: the full world-model training path, `LaProp`, the episode-split dataset, the prior-only
+open-loop rollout, and `imagine_trajectory` — 1024 posterior starts per replay batch, an
+action-provider interface, `H+1` states / `H` actions / `H` rewards / `H` continuations / the `H+1`
+continuation weight, at 3.8 / 10.6 / 20.9 ms and 204 / 463 / 858 MiB for H = 5 / 15 / 30. What does
+not: **critic, λ-returns, actor, and the online loop.**
 
 Next, in order:
 
-1. M6: begin from posterior states drawn from replay, take an action-provider interface with random
-   actions, advance through the prior, and return `H` actions/rewards/continuations and `H+1` latent
-   states. `RSSM.imagine_step` takes no embed argument — **keep it that way**; M5's structural
-   assertions and `encoder_tripwire` are reusable as-is.
-2. Exclude invalid and terminal start states, and implement the continuation weighting.
-3. Measure H∈{5,15,30} alignment, finiteness and memory. Image decoding stays **out** of the
-   behavior-training path; decode only for inspection.
+1. M7: the distributional critic (§4.7), the shared λ-return kernel with the bootstrap at `v[t+1]`
+   (§6.1), the slow-critic EMA regularizer, and the replay critic at weight 0.3. Use `RandomActionProvider`
+   from M6 for integration; start from hand-computed synthetic trajectories, not model output.
+2. Assert the six §6.1 fixtures exactly — zero rewards, constant rewards, true terminal, time limit,
+   λ=0, λ=1 — each failing if the bootstrap index moves to `t`. `weight` and `cont_start` from
+   `Imagination` are the inputs; the M7 trap is double-counting γ (§5.4).
+3. Measure `val` `sum(p.numel())` against the derived 66,111 (§10-7).
 4. Revisit the M5 diagnostics once online learning broadens the replay distribution — M5's own text
    requires it, and the current numbers describe a uniform-random data distribution only.
 
 **Deferred from M1 by decision, not blocked:** random-policy return floor, throughput benchmark,
-random-policy video. Scripts are written; they run in the M9 measurement pass. The 32.1 mean return
-in [results/m5/](results/m5/) is a property of the collected data, **not** that floor.
+random-policy video. Scripts are written; they run in the M9 measurement pass.
 
 `Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing has been profiled. M5
-did record the first real training cost — 7500 gradient steps in 1624.9 s, peak 1489.5 MiB — but a
-single world-model-only loop is not a per-stage profile.
+recorded the first real training cost (7500 gradient steps in 1624.9 s, peak 1489.5 MiB) and M6 the
+first imagination cost, but neither is a per-stage profile.
 
 ## Last Session
 
-**Session 8 — implemented and validated M5, open-loop prediction on held-out episodes.**
+**Session 9 — implemented and validated M6, the latent imagination engine.**
 
-- **The world model predicts, it does not only reconstruct.** 120 train / 20 held-out random-policy
-  Walker episodes, **7500 gradient steps** derived from the §7.7 ratio, LaProp lr 4e-5, 1624.9 s,
-  peak 1489.5 MiB. Open-loop reward MAE over 320 contexts × 8 latent samples beats the
-  training-set-mean predictor at **every** distance 1–30 (worst ratio 0.908 at k=28) and overtakes
-  last-reward persistence at **k=5**, narrowly (1.6 %). Persistence is far stronger at k=1.
-  Action shuffling costs 1.099× — measurably action-conditioned, weakly so.
-- **Two leak detectors were both necessary, and mutation proved it.** A `future_observations`
-  argument is invisible to the frame-corruption check; a one-frame slide inside `gather_contexts` is
-  invisible to the tripwire and the signature check. Seven open-loop mutants and six LaProp mutants
-  were each confirmed to fail. One mutation initially "survived" only because the patch text did not
-  match — mutation scripts now assert the edit applied.
-- **The owed LaProp test is discharged.** `tests/test_optim.py`, 8 hand-computed assertions in
-  float64 (float32 rounding at 1e-8 swamped the first attempt), covering the LaProp-vs-Adam ordering,
-  `eps` outside the sqrt, whole-tensor AGC, the `pmin` floor, warmup, and bias correction.
-- **The sandbox silently strips CUDA from detached processes.** `setsid nohup … &` through the
-  sandboxed shell fails `torch.cuda.is_available()` and falls back to **CPU without erroring** — the
-  first training launch ran 90 s on CPU before it was caught. Long runs must be launched with the
-  sandbox disabled, and the device line in the log must be read, not assumed.
-- **No deviation from the specification.** `results/m5/` records what the run cannot claim: nothing
-  about prediction under a competent policy, no return measurement, and no variability estimate.
+- **`imagine_trajectory` is the reusable generator**, `src/dreamer/imagine.py`: a posterior start
+  from replay, an `ActionProvider` (random or scripted), `H` prior-only steps, and `H+1` states /
+  `H` actions / `H` rewards / `H` continuations / the `H+1` weight. Gate **55/55** on a real Walker
+  batch with 1024 starts; 29 unit tests. H = 5 / 15 / 30 cost 3.8 / 10.6 / 20.9 ms and peak
+  204 / 463 / 858 MiB — linear in H, and §10-8's H=30 memory question is settled for the imagination
+  tensor ([results/m6/](results/m6/)).
+- **It reuses M5's transition path rather than forking it.** A `SequenceActionProvider` fed the same
+  actions and the same seeded generator reproduces `RSSM.imagine` bitwise — asserted in both the
+  suite and the gate.
+- **Ten mutants were each confirmed to fail.** One survived the first suite: a `future_observations`
+  argument, invisible to a signature check that compared against a fixed *name set*. The check now
+  tests substrings.
+- **Three tripwires, not one.** M5's `encoder_tripwire` (zero encoder calls during imagination), a
+  new tripwire on `env.step` (zero simulator calls), and the substring signature check. Each catches
+  a leak the others miss.
+- **No deviation from the specification.** One addition the M6 text does not name: the §5.4 weight
+  needs the continuation at the *start* state, which is not among the `H` returned continuations, so
+  `Imagination` carries it as `cont_start` and `weight[0] == con[0]`, not 1.
 
 ## Known Issues
 
@@ -405,7 +412,7 @@ single world-model-only loop is not a per-stage profile.
   the environment — `uv venv --seed` does, and pip does the installs.
 - **`pytest` is not installed; the suite is `unittest` and needs `PYTHONPATH=src:tests`.** The package
   is not installed into the venv, and `unittest discover` fails because `tests/` has no `__init__.py`
-  — name the five modules explicitly, as in the recorded command.
+  — name the eight modules explicitly, as in the recorded command.
 - **The reward head is invisible to testing at initialization.** `outscale: 0.0` zeroes the output
   kernel, so the two-hot loss is exactly `log(255)` regardless of the target and **no gradient
   reaches the encoder, the RSSM, or even the head's own hidden layer**. Any test of reward alignment
@@ -432,8 +439,13 @@ single world-model-only loop is not a per-stage profile.
   trains at roughly 1/30 speed and nothing else looks wrong. Launch long runs with the sandbox
   disabled and **read the `device:` line in the log** before walking away.
 - **No measurement of a trained *agent* exists — only of a trained world model.** `results/m5/`
-  holds open-loop prediction error and the first real training cost. There is still **no return, no
-  behaviour, and no per-stage profile**, because the actor, critic and online loop do not exist.
+  holds open-loop prediction error and the first real training cost; `results/m6/` holds an
+  imagination cost measured on an **untrained** model with **random** actions. There is still
+  **no return, no behaviour, and no per-stage profile**, because the critic, actor and online loop
+  do not exist.
+- **Every M6 reward magnitude is meaningless.** The gate perturbs `reward.mlp.out.weight` so
+  alignment does not pass vacuously, which makes the readout a random draw over ±4.85e8 bins. M6
+  tests that rewards are correctly *placed* and finite, never that they are right.
 - **Every M5 number describes a uniform-random data distribution.** M5's own text requires the
   diagnostics to be revisited once online learning broadens replay. Do not carry these numbers
   forward as properties of a trained agent's world model.

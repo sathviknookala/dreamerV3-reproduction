@@ -1,0 +1,4 @@
+horizon,rollouts,states,seconds_per_batch,us_per_state,peak_mib,outputs_finite,cont_in_unit_interval
+5,1024,6144,0.0038,0.6126,203.7,True,True
+15,1024,16384,0.0106,0.6472,463.2,True,True
+30,1024,31744,0.0209,0.6582,858.3,True,True
