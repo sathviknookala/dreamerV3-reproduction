@@ -27,7 +27,10 @@ results/
 Measured so far: environment and compute checks ([`m1/`](m1/)), the RSSM + encoder parameter count
 ([`m2m3/`](m2m3/)), the world-model parameter count, objective gate and fixed-subset overfit
 ([`m4/`](m4/)), and the **first real world-model training run** with its open-loop prediction
-evaluation on a held-out split ([`m5/`](m5/)) — 7500 gradient steps, 1624.9 s, peak 1489.5 MiB.
+evaluation on a held-out split ([`m5/`](m5/)) — 7500 gradient steps, 1624.9 s, peak 1489.5 MiB —
+and the **per-horizon imagination cost** ([`m6/`](m6/)): 1024 rollouts at H = 5 / 15 / 30 cost
+3.8 / 10.6 / 20.9 ms and peak 204 / 463 / 858 MiB on an **untrained** model with **random** actions,
+which is a feasibility measurement, not the M9 steady-state profile.
 **No return figure for a trained agent exists**; the random-policy return floor and the environment
 throughput benchmark are still deferred to the M9 measurement pass, and the 32.1 mean return
 recorded in `m5/` is a property of the collected random-policy data, not that floor.

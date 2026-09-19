@@ -1353,7 +1353,7 @@ artifact under `results/` supports it. Each has a milestone and a check that dec
 | 5 | Random-policy return floor | M1 | 20 episodes per task under the final reward convention; mean and sd recorded. |
 | 6 | Environment throughput (`env_step`/s incl. render) | M1 | Steady-state rate over ≥10k steps, GPU confirmed free first. |
 | 7 | **Instantiated parameter count** | **M2+M3, M4 (done); M7–M8** | **World model MEASURED 2026-09-18: 570,419** — `dyn` 376,704, `enc` 14,304, `dec` 80,595, `rew` 57,663, `con` 41,153, each equal to the §4.11 derivation — [`results/m4/param-count-measured-2026-09-18.txt`](../results/m4/param-count-measured-2026-09-18.txt). With `pol` 50,316 and `val` 66,111 still owed at M7–M8 the total closes at **686,846**. **The name `size1m` is not evidence of any count.** |
-| 8 | Peak VRAM at H=30 | M9 | `torch.cuda.max_memory_allocated()` during a steady-state update; must leave headroom below 24467 MiB. |
+| 8 | Peak VRAM at H=30 | M9 | `torch.cuda.max_memory_allocated()` during a steady-state update; must leave headroom below 24467 MiB. **Partially discharged at M6: the imagination tensor alone peaks at 858.3 MiB for 1024 rollouts × 31 states** ([`results/m6/horizon-cost-2026-09-18.csv`](../results/m6/horizon-cost-2026-09-18.csv)). That is one forward rollout on an untrained model — no posterior pass, no backward, no actor or critic — so the steady-state figure is still owed. |
 | 9 | Per-stage time share | M9 | Collection, render, replay transfer, world-model update, behaviour update — shares summing to wall-clock. |
 | 10 | Realized training ratio | M9 | Logged, with the §7.7 convention named; compared to the requested 64. |
 | 11 | Replay RAM occupancy | M9 | Measured at steady state; confirms or refutes §9-6's inertness hypothesis. |
@@ -1375,11 +1375,12 @@ Current state, as of 2026-09-18:
 
 | Scope | Status |
 |---|---|
-| Objectives, gradient routing, imagination, actor/critic (§5–§6) | **`specified`** |
+| Objectives, gradient routing, actor/critic (§5–§6) | **`specified`** |
 | Environment and transition contract (§7) | **`validated`** — 40/40 checks + M1 gate, [`results/m1/`](../results/m1/) |
 | Recurrence, encoder, posterior, prior, norm, init (§4.1, §4.2, §4.4, §4.8, §4.9) | **`validated`** — M2+M3 gate, [`results/m2m3/`](../results/m2m3/) |
 | Decoder, reward/continuation heads, `symexp_twohot`, world-model objective (§4.3, §4.5, §5.1–§5.5) | **`validated`** — M4 gate, [`results/m4/`](../results/m4/) |
-| Actor, critic, imagination, returns (§4.6, §4.7, §5.6, §5.7, §6.1) | **`specified`** — not `implemented` |
+| Latent imagination and the continuation weight (§4.10 starts, §5.4 weight) | **`validated`** — M6 gate 55/55, [`results/m6/`](../results/m6/) |
+| Actor, critic, returns (§4.6, §4.7, §5.6, §5.7, §6.1) | **`specified`** — not `implemented` |
 | Open-loop prediction from the prior (§4.4 prior path, §7.4 alignment) | **`validated`** — M5 gate 26/26, [`results/m5/`](../results/m5/) |
 | LaProp optimizer (§5.8) | **`validated`** — 8/8 hand-computed update tests, `tests/test_optim.py`; six mutants confirmed to fail |
 | §10-7 for `dyn`, `enc`, `dec`, `rew`, `con` | **measured** — 570,419 |

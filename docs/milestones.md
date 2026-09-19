@@ -17,12 +17,13 @@ configuration are recorded** — not when the code runs.
 | **M2+M3** | **CLOSED 2026-09-18.** Merged into one milestone with one gate. 12/12 unit tests, 12/12 real-batch GPU gate, measured parameter count equals the derivation. |
 | **M4** | **CLOSED 2026-09-18.** Gate passed: 11/11 unit tests, 15/15 real-batch GPU gate, fixed subset overfit, parameter count closes the derivation exactly. |
 | **M5** | **CLOSED 2026-09-18.** Gate passed 26/26 on a trained world model and a held-out split. Evidence: [`results/m5/`](../results/m5/). |
-| **M6** | **ACTIVE.** Next milestone. |
-| M7–M10 | Not started. |
+| **M6** | **CLOSED 2026-09-18.** Gate passed 55/55 plus 29 unit tests. Evidence: [`results/m6/`](../results/m6/). |
+| **M7** | **ACTIVE.** Next milestone. |
+| M8–M10 | Not started. |
 
-The environment contract, the RSSM state-transition core and the full world-model objective are
-`implemented` and `validated`; the actor, critic and imagination are still only `specified` — see the status legend in
-[spec.md §11](spec.md).
+The environment contract, the RSSM state-transition core, the full world-model objective and the
+imagination engine are `implemented` and `validated`; the actor and critic are still only
+`specified` — see the status legend in [spec.md §11](spec.md).
 
 ---
 
@@ -230,6 +231,28 @@ Keep image decoding out of the behavior-training path; decode only selected roll
 **Validation gate:** H∈{5,15,30} produces correctly aligned outputs, finite predictions, and measured memory use. Tests detect reward shifts, incorrect terminal weighting, and accidental posterior calls during imagination. Generated trajectories require neither simulator steps nor future images.
 
 **Deliverable:** A reusable imagination function and per-horizon cost measurements.
+
+> **Status 2026-09-18: PASSED.** `tests/test_imagine.py` 29/29 and `scripts/m6_gate.py` **55/55** on
+> a real Walker replay batch on the GPU — [`results/m6/gate-2026-09-18.txt`](../results/m6/gate-2026-09-18.txt).
+> Full record and limits: [`results/m6/README.md`](../results/m6/README.md).
+>
+> **`imagine_trajectory` is the reusable generator.** From 1024 posterior starts (every loss-bearing
+> non-terminal position of a B=16 / P=5 / T=64 batch — exactly the `B·K = 1024` of
+> [spec.md §4.10](spec.md)) it returns `H+1` states, `H` actions, `H` rewards, `H` continuations and
+> the `H+1` trajectory weight. Per-horizon cost, 1024 rollouts, untrained model, no decoding:
+> **H=5 3.8 ms / 203.7 MiB, H=15 10.6 ms / 463.2 MiB, H=30 20.9 ms / 858.3 MiB**
+> ([`horizon-cost-2026-09-18.csv`](../results/m6/horizon-cost-2026-09-18.csv)) — linear in H, and the
+> §10-8 H=30 memory question is settled for the imagination tensor. **These are not the M9 profile:**
+> no posterior pass, no backward, no actor, no critic, no environment.
+>
+> **Ten mutants were each confirmed to fail the suite**, including a `future_observations` argument
+> that **survived** the first version — the signature check tested a fixed name set instead of
+> substrings, and was strengthened until it caught it.
+>
+> **No deviation from the specification.** One addition the M6 text does not name: the trajectory
+> weight needs the continuation at the *start* state, which is not among the `H` returned
+> continuations, so `Imagination` carries it separately as `cont_start`. `weight[0] == con[0]` per
+> [spec.md §5.4](spec.md).
 
 ## M7 — Critic and return targets
 
