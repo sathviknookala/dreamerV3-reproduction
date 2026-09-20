@@ -41,15 +41,26 @@ Cartpole and Walker, a complete update costing 206.0 / 221.2 / 236.8 ms at H = 5
 **H=30 peak VRAM 2373.8 MiB** in a steady-state update, collection at 2.796 ms/control step, and a
 derived **≈52 GPU-hours** for the 12-run final campaign.
 
-**The parameter count is the only figure here that describes the finished agent.** Every other
-number was measured on an untrained or deliberately perturbed model: `m6/`, `m7/` and `m8/` all run
-at initialization, `m8/`'s update diagnostic uses synthetic `U(−1, 1)` returns rather than
-predictions, and `m5/`'s world model saw only uniform-random data.
+And the **first trained agents** ([`m9/pilot/`](m9/pilot/)): two full-budget runs at development
+seed 100, H=15, from 64×64 pixels. Walker Walk over 1,000,000 control steps in 5.61 h goes from a
+29.6 opening five-evaluation mean to **542.7 over its last five**, consolidating at 457–555 after
+850K with `return_std` down to 24–38; its final checkpoint reads **517.1 ± 61.3** against a
+**554.9 ± 24.5** peak at 975K. Cartpole Swingup over 500,000 steps in 3.07 h **does not
+consolidate** — it sits in a 72–79 band for eight of twenty evaluations, peaks at **217.2 ± 16.7**
+at 350K, and decays to **132.6 ± 27.5** at budget.
 
-**No return figure for a trained agent exists.** A learned policy now steps the environment — the
-M9 gate collects with one and evaluates with one — but no agent has been trained past a smoke-test
-budget, so `m9/`'s evaluation returns describe a ~1,200-step agent and are a smoke signal, not a
-result. The random-policy return floor and the environment throughput benchmark are **still
-unrecorded**; `scripts/m1_random_floor.py` has been repaired (it was a copy of the throughput script
-and never accumulated a reward) and runs in the pilot pass. The 32.1 mean return recorded in `m5/`
-is a property of the collected random-policy data, not that floor.
+**Apart from the parameter count and `m9/pilot/`, every number here was measured on an untrained or
+deliberately perturbed model:** `m6/`, `m7/` and `m8/` all run at initialization, `m8/`'s update
+diagnostic uses synthetic `U(−1, 1)` returns rather than predictions, `m5/`'s world model saw only
+uniform-random data, and `m9/`'s gate returns describe a ~1,200-step agent.
+
+**The random-policy return floor is still unrecorded**, and so is the environment throughput
+benchmark. `scripts/m1_random_floor.py` has been repaired (it was a copy of the throughput script
+and never accumulated a reward) but has not yet been run. **Until it is, neither pilot curve can be
+called improvement over the floor** — which is precisely what M9's gate requires, so **M9 stays
+open**. The 32.1 mean return recorded in `m5/` is a property of the collected random-policy data,
+not that floor.
+
+**Every pilot return is 5 episodes from one training seed**, at fixed evaluation seeds 2000–2004
+with the policy acting on the distribution mean. The core hypothesis is specified on 20 episodes at
+the final checkpoint across training seeds 0/1/2; that is M10 work and none of it is done.

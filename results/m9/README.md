@@ -1,9 +1,17 @@
 # M9 — the online loop
 
-**Everything in this directory is implementation validation, not demonstrated learning.** The loop
-runs, every component is wired as [spec.md](../../docs/spec.md) §5 and §7 say, resume is exact, and
-the per-stage cost is measured. No number here is evidence that the agent learns. **M9 stays open**
-until both pixel tasks show sustained improvement over the M1 random floor.
+**Everything in this directory outside [`pilot/`](pilot/) is implementation validation, not
+demonstrated learning.** The loop runs, every component is wired as [spec.md](../../docs/spec.md) §5
+and §7 say, resume is exact, and the per-stage cost is measured. No number in the gate or the profile
+is evidence that the agent learns.
+
+[`pilot/`](pilot/) holds the **first trained agents**: two full-budget runs at development seed 100,
+H=15. Walker Walk improves from a 29.6 five-evaluation opening mean to 542.7 over its last five and
+consolidates at 457–555 after 850K steps; **Cartpole Swingup does not consolidate**, decaying from a
+217.2 peak at 350K to 132.6 at its 500K budget.
+
+**M9 stays open.** Its gate requires *both* pixel tasks to show sustained improvement over the M1
+random floor, and **that floor is still unrecorded**.
 
 ## What is here
 
@@ -14,6 +22,7 @@ until both pixel tasks show sustained improvement over the M1 random floor.
 | [`profile-walker-2026-09-19.csv`](profile-walker-2026-09-19.csv) | Per-stage cost of a complete update at H = 5 / 15 / 30, B=16 T=64 P=5. |
 | [`profile-walker-2026-09-19.json`](profile-walker-2026-09-19.json) | The same run's device, flags, arguments and exclusions. |
 | [`checkpoint-cost-2026-09-19.json`](checkpoint-cost-2026-09-19.json) | Resume-checkpoint write/read at full 500,000-transition occupancy. |
+| [`pilot/`](pilot/) | The two full-budget pilot runs: evaluations, per-update logs, manifests, configs. **The first trained-agent returns in the project.** |
 
 Reproduce with:
 
@@ -101,6 +110,9 @@ and it does not include a failed or restarted run.
 
 ## Reading a run's log
 
+**The two logs in [`pilot/`](pilot/) predate the segment counter and this rule does not apply to
+them** — see that directory's README. What follows describes runs launched after commit `a0bc33b`.
+
 `train-log.csv` and `evaluations.jsonl` are **append-only across resumes, and a resume replays**.
 A checkpoint is older than wherever the previous segment died, so the rows between the two are
 written a second time. Both artifacts therefore carry a `segment` column, incremented on every
@@ -116,8 +128,11 @@ columns, and `evaluations.jsonl` records each evaluation's own seconds and steps
 
 ## What none of this establishes
 
-- **No return.** Nothing here shows the agent learns. The M1 random floor has still not been
-  recorded, so there is not yet a floor to clear.
+- **No floor comparison.** The M1 random floor has still not been recorded, so neither pilot curve
+  can be described as improvement *over the floor* — which is exactly what M9's gate requires.
+  [`pilot/`](pilot/) has the returns; nothing here has the floor.
+- **The gate and profile numbers remain untrained-model measurements.** The pilots do not
+  retroactively qualify them.
 - **The gate's evaluation returns describe a ~1,200-step agent.**
 - **The profile is a fixed-occupancy measurement.** Replay was 2,000 transitions of random data; a
   1M-step run samples from up to 500,000 and evicts.

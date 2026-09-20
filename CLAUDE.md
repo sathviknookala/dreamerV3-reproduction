@@ -28,6 +28,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
 | [results/m9/](results/m9/) | Before quoting a runtime, a per-stage share, a memory figure or a campaign cost, and before touching the online loop, checkpointing or evaluation. The M9 integration gate (75/75 on each task), the per-stage profile at H = 5/15/30, the checkpoint cost, and what none of it establishes. |
+| [results/m9/pilot/](results/m9/pilot/) | **Before quoting any return for a trained agent.** The two full-budget pilots at seed 100, H=15 — Walker's learning curve, Cartpole's failure to consolidate, both raw logs, and the limits on reading either. |
 | [results/m8/](results/m8/) | Before quoting an entropy, a log-probability, a normalization scale or a parameter count, or touching the policy path. The M8 gate, the `tarval` and `debias` resolutions, and the REINFORCE direction check. |
 | [results/m7/](results/m7/) | Before quoting a value, a λ-return or a critic parameter count, or touching the return path. The M7 gate, the three readings of γ, and the value-vs-target fit. |
 | [results/m6/](results/m6/) | Before quoting an imagination cost or touching the rollout path. The M6 gate, the per-horizon cost/memory table, and what those numbers exclude. |
@@ -198,7 +199,10 @@ model? No directional prediction is made. Improvement, plateau, decline, and no 
 n=3 are all reportable outcomes; a null result with clear measurement and stated limitations is a
 valid deliverable. Stating a direction now would only create pressure to find it.
 
-**What it cannot claim.** Absolute returns and runtime: **TBD — no run exists.** The parameter count
+**What it cannot claim.** Runtime is now measured and the first returns exist
+([results/m9/pilot/](results/m9/pilot/)), but they are **pilot returns at one development seed over
+five evaluation episodes**, with **no random floor to compare against** — not a result under this
+hypothesis, which is specified on 20 episodes across seeds 0/1/2. The parameter count
 is now **measured end to end**: `sum(p.numel())` over the world model is **570,419**
 ([results/m4/](results/m4/)), `val` **66,111** ([results/m7/](results/m7/)) and `pol` **50,316**
 ([results/m8/](results/m8/)), each equal to its §4.11 derivation, for a measured trainable total of
@@ -383,82 +387,85 @@ code already says creates drift.
 
 ## Current Focus
 
-**M9 — infrastructure complete, empirical qualification pending.** M0 closed 2026-09-17; M1, the
-merged **M2+M3**, **M4**, **M5**, **M6** and **M7** closed 2026-09-18; **M8 closed 2026-09-19**.
-**M9's online loop, checkpointing, evaluation and profiling are implemented and gate-validated**
-2026-09-19 ([results/m9/](results/m9/)) — but **M9 is not closed.**
+**M9 — Walker learns, Cartpole does not. M9 is OPEN.** M0 closed 2026-09-17; M1, the merged
+**M2+M3**, **M4**, **M5**, **M6** and **M7** closed 2026-09-18; **M8 closed 2026-09-19**. M9's
+infrastructure is gate-validated, and as of **2026-09-20 two full-budget pilots exist**
+([results/m9/pilot/](results/m9/pilot/)) at seed 100, H=15, run concurrently on the one card:
 
-A learned policy now steps the environment. What does not exist is **any evidence that it learns**:
-nothing has trained past a smoke-test budget, and **the M1 random-policy floor is still unrecorded**,
-so there is not yet a floor to clear.
+- **Walker Walk, 1M steps, 5.61 h.** Opening five-evaluation mean **29.6** → last five **542.7**,
+  consolidating at 457–555 after 850K with `return_std` down to 24–38. Final checkpoint
+  **517.1 ± 61.3**; peak **554.9 ± 24.5** at 975K — **the final checkpoint is not the best one.**
+- **Cartpole Swingup, 500K steps, 3.07 h.** Eight of twenty evaluations sit in a 72–79 band with
+  `return_std` under 1.5; three excursions; peak **217.2 ± 16.7** at 350K decaying to
+  **132.6 ± 27.5** at budget. **No consolidation.**
+
+This is the first evidence the implementation learns visual control at all, which retires the risk
+that some component is silently broken for every task. It does **not** close M9: the gate needs
+*both* tasks, and **the M1 random-policy floor is still unrecorded**, so neither curve can yet be
+called improvement over a floor.
 
 **M9 closes only when all five hold:** both pixel tasks show sustained improvement over the random
-floor, resume works (**done**), H=30 has measured memory headroom (**done**, 2373.8 MiB of 23,986),
-campaign costs are measured (**done**, ≈52 GPU-hours), and the configuration in
-[docs/config.md](docs/config.md) is frozen (**not done**).
+floor (**Walker yes, Cartpole no, floor unmeasured**), resume works (**done**), H=30 has measured
+memory headroom (**done**, 2373.8 MiB of 23,986), campaign costs are measured (**done**,
+≈52 GPU-hours), and the configuration in [docs/config.md](docs/config.md) is frozen (**not done**).
 
-Next, in order — the pilot handoff. Run detached with the sandbox disabled, and **read the `device:`
-line** before walking away:
+Next, in order:
 
-1. Random floors and throughput, both tasks — M10 reads the floor:
+1. **Random floors, both tasks.** Nothing can be concluded from either pilot without them. These
+   build no torch model, so they are CPU-bound and will not contend for the GPU:
    ```bash
-   PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task walker   --env-seed 900 --policy-seed 900 --episodes 20 --output results/m1/random-floor-walker-$(date +%F).json   --video results/m1/random-walker-$(date +%F).mp4
    PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task cartpole --env-seed 901 --policy-seed 901 --episodes 20 --output results/m1/random-floor-cartpole-$(date +%F).json --video results/m1/random-cartpole-$(date +%F).mp4
-   PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py   --task walker   --env-seed 902 --policy-seed 902 --steps 10000 --output results/m1/throughput-walker-$(date +%F).json
-   PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py   --task cartpole --env-seed 903 --policy-seed 903 --steps 10000 --output results/m1/throughput-cartpole-$(date +%F).json
+   PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task walker   --env-seed 900 --policy-seed 900 --episodes 20 --output results/m1/random-floor-walker-$(date +%F).json   --video results/m1/random-walker-$(date +%F).mp4
    ```
-2. Re-profile if anything in the update path changed: `scripts/m9_profile.py --task walker --tag <date>`.
-3. **Cartpole first, as the debugging task** — 500K steps, ~2.5 h:
+2. **Throughput, both tasks** — the last M1 deferral:
    ```bash
-   setsid nohup env PYTHONPATH=src .venv/bin/python scripts/m9_train.py --task cartpole --seed 100 --out runs/m9-cartpole-s100 > runs/m9-cartpole-s100.log 2>&1 &
+   PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py --task walker   --env-seed 902 --policy-seed 902 --steps 10000 --output results/m1/throughput-walker-$(date +%F).json
+   PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py --task cartpole --env-seed 903 --policy-seed 903 --steps 10000 --output results/m1/throughput-cartpole-$(date +%F).json
    ```
-4. **Walker** — 1M steps, ~4.9 h at H=15:
-   ```bash
-   setsid nohup env PYTHONPATH=src .venv/bin/python scripts/m9_train.py --task walker --seed 100 --out runs/m9-walker-s100 > runs/m9-walker-s100.log 2>&1 &
-   ```
-5. **Resume either pilot** from its newest boundary checkpoint:
-   ```bash
-   PYTHONPATH=src .venv/bin/python scripts/m9_train.py --task walker --seed 100 --out runs/m9-walker-s100 --resume runs/m9-walker-s100/resume-<step>.pt
-   ```
-6. Learning curves from `runs/<run>/train-log.csv` and `evaluations.jsonl`; re-run the M5 open-loop
-   diagnostics against a pilot checkpoint now that online learning broadens the replay distribution.
+3. **Re-evaluate both `model-final.pt` at 20 episodes.** Every pilot return is 5 episodes; the core
+   hypothesis is specified on 20. **No standalone checkpoint-evaluation entry point exists** —
+   `model-final.pt` is loaded only by `m9_train.py` and `m9_gate.py`, neither of which re-evaluates
+   a finished run. One needs writing against `src/dreamer/evaluation.py`.
+4. **Diagnose Cartpole** — this is milestone step M9-4, and it is now active. Its world model is not
+   the suspect: final `rec` **3.38** against Walker's 23.50, `reward_mae` 0.076. Its
+   `value_value_mean` reached only **46.79** against Walker's 169.62. It inherits Walker's H=15 and
+   update ratio 64 unchanged, so **task-specific exploration and a shared configuration defect are
+   not yet separated.** Change one thing at a time and repeat the affected gates.
+5. Re-run the M5 open-loop diagnostics against a pilot checkpoint, now that online learning has
+   broadened the replay distribution away from uniform-random data.
+6. Freeze [docs/config.md](docs/config.md).
+
+Launch any further run detached with the sandbox disabled and **read the `device:` line** before
+walking away. Resume from a boundary checkpoint with
+`scripts/m9_train.py --task <t> --seed 100 --out <dir> --resume <dir>/resume-<step>.pt`.
 
 Development seeds are **100–102**. **Final training seeds 0–2 and final evaluation seeds 1000–1019
 stay unused** until M10.
 
-**Deferred from M1 by decision and still outstanding:** random-policy return floor, throughput
-benchmark, random-policy video. **Step 1 above discharges all three** — `m1_random_floor.py` takes
-`--video` and `viz.write_video` pipes raw frames to `ffmpeg` (falling back to a `.npz` of the frames
-if `ffmpeg` is absent).
+**Deferred from M1 and still outstanding:** random-policy return floor, throughput benchmark,
+random-policy video. **Steps 1–2 discharge all three.**
 
 ## Last Session
 
-**Session 13 — implemented M9's online learner, checkpointing, evaluation and qualification
-tooling. M9 remains OPEN.**
+**Session 14 — ran the first two full-budget pilots to completion. Walker learns visual control;
+Cartpole does not consolidate. M9 remains OPEN.**
 
-- **Five new modules.** `config.py` (`RunConfig`, per-stream seed derivation, `episode_seed`),
-  `agent.py` (`LatentPolicy`, `EpisodicEnv`, `Agent` owning every generator), `training.py`
-  (`TrainingScheduler`, `compute_losses`/`apply_update`, `OnlineTrainer`), `checkpoint.py` (atomic
-  save, resume vs compact model checkpoints, rotation) and `evaluation.py` (isolated evaluation with
-  a fingerprint guard). Entry points `scripts/m9_{train,gate,profile,mutants}.py`.
-- **Gate 75/75 on Cartpole and 75/75 on Walker**, plus **79 new unit tests** (249 total) and
-  **22/22 mutants killed**. The Walker gate reproduces the committed counts exactly: 570,419 /
-  50,316 / 66,111, total 686,846.
-- **`Why It Is a Target` is no longer TBD.** A complete update costs 206.0 / 221.2 / 236.8 ms at
-  H = 5 / 15 / 30; backward + optimizer is 42.7% of a Walker run and barely moves with `H`, so
-  15 → 30 costs **7.0%** more per update, not 2×. H=30 peaks at 2373.8 MiB with ~22 GB headroom.
-  The 12-run campaign derives to **≈52 GPU-hours**.
-- **Three real defects found and fixed while measuring.** `torch.save`'s default pickle protocol 2
-  latin1-encodes bytes and inflated a 500,000-transition replay from 5.744 to 8.613 GiB and its
-  write from 10.1 to 41.3 s — `atomic_save` now pins protocol 5. `scripts/m1_random_floor.py`
-  was a **byte-for-byte copy of `m1_throughput.py`** that never accumulated a reward; it now
-  measures 20 complete episodes per task. And **a resume replays, so both logs double the replayed
-  region** — `train-log.csv` and `evaluations.jsonl` now carry a `segment` incremented on every
-  restore, and a curve keeps the highest segment per `gradient_step`. An `eval_seconds` column was
-  added beside it, since `elapsed_s` is wall clock and includes evaluation.
-- **`docs/config.md` said the 500,000-transition buffer holds a complete 1M-step Walker run.** It
-  does not — 500,000 < 1,000,000. Corrected: eviction begins near the half-way point and the second
-  half of a Walker run evicts the first, whole episodes at a time.
+- **Two full-budget pilots finished cleanly**, concurrently on the one RTX PRO 4000: Walker 1M steps
+  / 62,187 optimizer steps / 20,197.7 s, Cartpole 500K / 30,937 / 11,069.5 s. Both hit budget, wrote
+  `model-final.pt` and a manifest, and ended with replay at its 500,000 capacity and 500 complete
+  episodes — the predicted eviction behaviour. Evaluation was 3.2% and 3.0% of wall clock.
+- **Walker is the project's first learning result:** 29.6 → 542.7 comparing first and last five
+  evaluations, consolidating at 457–555 after 850K. Its actor did **not** collapse to `minstd`
+  (final entropy +2.78) and `policy_retnorm_scale` left its floor of 1.0 for 25.78.
+- **Cartpole is the failure to investigate**, and it is the *easier* validation task. Its perception
+  is fine; its critic barely grew. Recorded as milestone step M9-4 rather than diagnosed here.
+- **The pilot artifacts are committed to [results/m9/pilot/](results/m9/pilot/)** — evaluations,
+  per-update logs, manifests and configs — because `runs/` is gitignored and no number may be quoted
+  from an uncommitted file.
+- **Both pilot logs predate commit `a0bc33b` by ~2 h**, so they carry **no `segment` column** and the
+  documented dedupe rule does not apply to them. Neither run resumed, so no row is duplicated. Noted
+  in both `results/m9/README.md` and the pilot README so a future plot does not key on a null field.
+
 
 ## Known Issues
 
@@ -491,12 +498,18 @@ tooling. M9 remains OPEN.**
   silently.** `torch.cuda.is_available()` returns `False` with only a `UserWarning`; the run then
   trains at roughly 1/30 speed and nothing else looks wrong. Launch long runs with the sandbox
   disabled and **read the `device:` line in the log** before walking away.
-- **No measurement of a trained *agent* exists — only of a trained world model.** `results/m5/`
-  holds open-loop prediction error and the first real training cost; `results/m6/`, `results/m7/`
-  and `results/m8/` hold imagination cost, critic arithmetic and policy arithmetic measured on an
-  **untrained** model; `results/m9/` holds the per-stage profile and 75/75 integration checks. A
-  learned policy now steps the environment, but **no return figure for a trained agent exists** —
-  the M9 gate's evaluation returns describe a ~1,200-step agent and are a smoke signal.
+- **Only [results/m9/pilot/](results/m9/pilot/) describes a trained agent.** `results/m5/` holds
+  open-loop prediction error on uniform-random data; `results/m6/`, `results/m7/` and `results/m8/`
+  hold imagination cost, critic arithmetic and policy arithmetic measured on an **untrained** model;
+  `results/m9/`'s gate returns describe a ~1,200-step agent and are a smoke signal. Do not quote any
+  of those as a property of the trained agent.
+- **Cartpole, the easier validation task, is the one that failed to learn.** Walker consolidates at
+  457–555; Cartpole peaks at 217.2 and decays to 132.6. Before assuming a Cartpole-specific
+  exploration problem, note that it inherits Walker's H=15 and update ratio 64 unchanged — a shared
+  configuration defect is not ruled out, and neither explanation is tested.
+- **No random floor exists, so no pilot return can be called improvement over one.** Both M9's gate
+  and the core hypothesis are stated against that floor. `scripts/m1_random_floor.py` is repaired
+  and ready; it has never been run.
 - **`scripts/m9_gate.py` is implementation validation, NOT the M9 validation gate.** It proves the
   loop is wired as specified. M9's actual gate is empirical: both pixel tasks must show sustained
   improvement over the random floor. Do not read 75/75 as M9 closing.
@@ -504,6 +517,12 @@ tooling. M9 remains OPEN.**
   checkpoint compute an identical next update; continued for hundreds of updates they drift from
   *each other* at ~1e-6. That is nondeterministic CUDA convolution backward, measured, not a
   checkpoint defect — so a resume test must assert next-update equality, never trajectory equality.
+- **The two pilot logs predate the segment counter.** Both processes started 2026-09-19 20:45:01;
+  commit `a0bc33b` landed 22:42:15. So `results/m9/pilot/evaluations-*.jsonl` has **no `segment`
+  field** and `train-log-*.csv` has **neither `segment` nor `eval_seconds`**. Neither run resumed,
+  so nothing is duplicated and the rule below does not apply to them. A resumed run started from
+  those checkpoints would write the newer schema mid-file, leaving `.segment == null` on the earlier
+  rows — plotting code should tolerate that.
 - **A resume replays, so `train-log.csv` and `evaluations.jsonl` contain duplicated rows.** The
   checkpoint is older than wherever the previous segment died, and the rows between the two are
   written again. Both carry a `segment` column incremented on every restore: **plot the highest
