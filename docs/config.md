@@ -30,10 +30,10 @@ The values below are starting choices to qualify during development. Hardware fi
 | Training sequences | Start with batch 16, length 64 | Treat any context/burn-in prefix separately from loss-bearing positions |
 | Imagination | H=15 transitions; H+1 latent states | Final Walker comparison uses H∈{5,15,30} |
 | Discount / return mixing | γ=0.997; λ=0.95 | Freeze after source reconciliation |
-| Behaviour objective | REINFORCE, fast-critic baseline, entropy η=3e-4; `retnorm` percentile EMA (5/95, rate 0.01, `S = max(1, hi−lo)`) | Implemented and validated at M8 ([spec.md §5.6](spec.md)). The EMAs are **uncorrected** at the pin, so `S` sits at its floor of 1 for the first few hundred updates and early advantages are effectively unnormalized — log the realized `S` during M9 and confirm it leaves the floor before freezing |
+| Behaviour objective | REINFORCE, fast-critic baseline, entropy η=3e-4; `retnorm` percentile EMA (5/95, rate 0.01, `S = max(1, hi−lo)`) | Implemented and validated at M8 ([spec.md §5.6](spec.md)). The EMAs are **uncorrected** at the pin, so `S` sits at its floor of 1 for the first few hundred updates and early advantages are effectively unnormalized — **measured 2026-09-20: `S` leaves the floor and rises to 25.78 on Walker and 15.52 on Cartpole** by end of run ([`results/m9/pilot/`](../results/m9/pilot/)), so the floor is an early-training transient, not a stuck state. Qualified; no change needed before freezing |
 | Collection | One environment first; action repeat 1 | Log native control steps separately from agent decisions and physics substeps |
 | Replay | CPU-resident uint8 frames; initial capacity 500,000 transitions | Measure total RAM use and avoid duplicate image storage |
-| Update ratio | Start with 64 replay training positions per collected transition | Log the exact definition and realized ratio; qualify learning before freezing |
+| Update ratio | Start with 64 replay training positions per collected transition | **Realized ratio measured at exactly 64.0** on every row of both full-budget pilots ([spec.md §10-10](spec.md)); the convention is loss-bearing positions only. The *definition* is discharged. **Learning is not yet qualified** — Walker consolidates, Cartpole does not, so this value is still a candidate cause and cannot be frozen yet |
 | Initial random collection | 5,000 agent transitions | Preserve the same warm-up budget in final comparisons |
 | Planning budgets | Walker: 1M control steps/run; Cartpole: 500K/run | Qualify cost and learning in M9; all Walker horizon conditions receive the same final budget |
 | Diagnostic evaluation | Every 25,000 training control steps; 5 episodes at seeds 2000–2004; mean action; video from the first seed | Isolated simulator and generators; never touches replay, optimizer, normalizer or training counters. Costs 3.29 ms/control step, ~3.7% of a Walker run ([`results/m9/`](../results/m9/)) |
@@ -108,9 +108,13 @@ This matters for the horizon comparison only insofar as it applies identically t
 conditions, which hold real data fixed. It matters for any claim about what the world model was
 trained on: at the end of a Walker run, the earliest half of the run is gone.
 
-The qualification rule is unchanged — measure occupancy at M9. `OnlineTrainer` logs
-`replay_occupancy` on every logged row, and eviction is episode-safe by construction
-(`ReplayBuffer._enforce_capacity` drops whole episodes and raises rather than truncating one).
+**Measured 2026-09-20, and the arithmetic holds empirically.** Walker collected 1,000 episodes /
+1,000,000 transitions and finished holding **500,000 / 500 complete episodes** — exactly half evicted.
+Cartpole collected 500 / 500,000 and evicted nothing. Run manifests in
+[`results/m9/pilot/`](../results/m9/pilot/); this discharges [spec.md §10-11](spec.md) and refutes
+§9-6's inertness expectation for Walker. `OnlineTrainer` logs `replay_occupancy` on every row, and
+eviction is episode-safe by construction (`ReplayBuffer._enforce_capacity` drops whole episodes and
+raises rather than truncating one).
 
 ### Parameter count
 

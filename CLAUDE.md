@@ -147,7 +147,10 @@ of 23,986 MiB, roughly 22 GB of headroom.
 **The 12-run final campaign derives to ≈52 GPU-hours** (Walker 4.7 / 4.9 / 5.2 h per run at
 H = 5 / 15 / 30, Cartpole 2.5 h, three seeds each). That is a derivation from measured per-stage
 costs at a fixed 2,000-transition replay occupancy, **not a measured run**, and it excludes failed
-or restarted runs.
+or restarted runs. The two pilots are the only measured runtimes: Walker H=15 **5.61 h** and Cartpole
+**3.07 h** ([results/m9/pilot/](results/m9/pilot/)) — but they ran *concurrently on one card*, so
+Walker's 14% overshoot of its 4.9 h derivation is contention, not a solo cost. No solo full-budget
+runtime has been measured.
 
 Compute cost is not incidental — it is one of the three response variables in the horizon experiment,
 alongside return and prediction error.
