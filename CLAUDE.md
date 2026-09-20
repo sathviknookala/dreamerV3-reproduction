@@ -23,7 +23,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/spec.md](docs/spec.md) | **Before writing any model code**, and whenever the paper and the reference implementation appear to disagree. The M0 specification, now complete: pinned sources §1, version manifest §2, paper→code→project mapping §3, exact architecture §4, objectives and gradient routing §5, resolved ambiguities §6, environment and counters §7, seeds §8, deviations §9, deferred measurements §10. |
 | [docs/milestones.md](docs/milestones.md) | When starting or closing any milestone M0–M9. Purpose, implementation scope, validation gate, and deliverable for each. |
 | [docs/config.md](docs/config.md) | Before changing any hyperparameter or quoting a setting. Initial values with their qualification rules. **Not frozen** until the end of M9. |
-| [docs/testing-hazards.md](docs/testing-hazards.md) | **Before writing any test or gate check**, and whenever a new assertion passes on the first try. The 20+ places where the obvious assertion passes while the bug survives, grouped by component. |
+| [docs/testing-hazards.md](docs/testing-hazards.md) | **Before writing any test or gate check**, and whenever a new assertion passes on the first try. The 35+ places where the obvious assertion passes while the bug survives, grouped by component. |
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
@@ -254,7 +254,7 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (247), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
+- Unit tests (249), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
   M5 gate (26), the M6 gate (55), the M7 gate (36), the M8 gate (63) and the M9 gate (75 per task),
   verbatim:
 
@@ -309,7 +309,7 @@ training settings are context only, never the comparison.
   .venv/bin/python scripts/m5_collect.py && .venv/bin/python scripts/m5_train.py && .venv/bin/python scripts/m5_eval.py --tag 2026-09-18 && .venv/bin/python scripts/m5_gate.py --report results/m5/openloop-2026-09-18.json
   ```
 - A test that passes where the bug cannot occur is not a test — confirm it fails without its fix
-- **Domain testing hazards live in [docs/testing-hazards.md](docs/testing-hazards.md)** — 20+ traps
+- **Domain testing hazards live in [docs/testing-hazards.md](docs/testing-hazards.md)** — 35+ traps
   where the obvious assertion passes while the bug survives, grouped by component. **Read it before
   writing a test or gate check**, and whenever a new assertion passes on the first try. The two that
   bite in almost every session:
@@ -441,18 +441,21 @@ tooling. M9 remains OPEN.**
   (`TrainingScheduler`, `compute_losses`/`apply_update`, `OnlineTrainer`), `checkpoint.py` (atomic
   save, resume vs compact model checkpoints, rotation) and `evaluation.py` (isolated evaluation with
   a fingerprint guard). Entry points `scripts/m9_{train,gate,profile,mutants}.py`.
-- **Gate 75/75 on Cartpole and 75/75 on Walker**, plus **77 new unit tests** (247 total) and
+- **Gate 75/75 on Cartpole and 75/75 on Walker**, plus **79 new unit tests** (249 total) and
   **22/22 mutants killed**. The Walker gate reproduces the committed counts exactly: 570,419 /
   50,316 / 66,111, total 686,846.
 - **`Why It Is a Target` is no longer TBD.** A complete update costs 206.0 / 221.2 / 236.8 ms at
   H = 5 / 15 / 30; backward + optimizer is 42.7% of a Walker run and barely moves with `H`, so
   15 → 30 costs **7.0%** more per update, not 2×. H=30 peaks at 2373.8 MiB with ~22 GB headroom.
   The 12-run campaign derives to **≈52 GPU-hours**.
-- **Two real defects found and fixed while measuring.** `torch.save`'s default pickle protocol 2
+- **Three real defects found and fixed while measuring.** `torch.save`'s default pickle protocol 2
   latin1-encodes bytes and inflated a 500,000-transition replay from 5.744 to 8.613 GiB and its
-  write from 10.1 to 41.3 s — `atomic_save` now pins protocol 5. And `scripts/m1_random_floor.py`
+  write from 10.1 to 41.3 s — `atomic_save` now pins protocol 5. `scripts/m1_random_floor.py`
   was a **byte-for-byte copy of `m1_throughput.py`** that never accumulated a reward; it now
-  measures 20 complete episodes per task.
+  measures 20 complete episodes per task. And **a resume replays, so both logs double the replayed
+  region** — `train-log.csv` and `evaluations.jsonl` now carry a `segment` incremented on every
+  restore, and a curve keeps the highest segment per `gradient_step`. An `eval_seconds` column was
+  added beside it, since `elapsed_s` is wall clock and includes evaluation.
 - **`docs/config.md` said the 500,000-transition buffer holds a complete 1M-step Walker run.** It
   does not — 500,000 < 1,000,000. Corrected: eviction begins near the half-way point and the second
   half of a Walker run evicts the first, whole episodes at a time.

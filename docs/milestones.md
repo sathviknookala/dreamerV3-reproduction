@@ -20,7 +20,7 @@ configuration are recorded** — not when the code runs.
 | **M6** | **CLOSED 2026-09-18.** Gate passed 55/55 plus 29 unit tests. Evidence: [`results/m6/`](../results/m6/). |
 | **M7** | **CLOSED 2026-09-18.** Gate passed 36/36 plus 45 unit tests. Evidence: [`results/m7/`](../results/m7/). |
 | **M8** | **CLOSED 2026-09-19.** Gate passed 63/63 plus 38 unit tests; `pol` measured at 50,316 and the agent total at 686,846. Evidence: [`results/m8/`](../results/m8/). |
-| **M9** | **ACTIVE — infrastructure complete, empirical qualification pending.** The online loop, checkpointing, evaluation and profiling are implemented and gate-validated: 75/75 on Cartpole and 75/75 on Walker, plus 77 new unit tests, 22/22 mutants killed, and a measured per-stage profile at H = 5/15/30. Evidence: [`results/m9/`](../results/m9/). **Not closed:** no pilot has demonstrated learning, the M1 random floor is still unrecorded, and the configuration is not frozen. |
+| **M9** | **ACTIVE — infrastructure complete, empirical qualification pending.** The online loop, checkpointing, evaluation and profiling are implemented and gate-validated: 75/75 on Cartpole and 75/75 on Walker, plus 79 new unit tests, 22/22 mutants killed, and a measured per-stage profile at H = 5/15/30. Evidence: [`results/m9/`](../results/m9/). **Not closed:** no pilot has demonstrated learning, the M1 random floor is still unrecorded, and the configuration is not frozen. |
 | M10 | Not started. |
 
 Every component of the agent — the environment contract, the RSSM state-transition core, the
