@@ -54,12 +54,16 @@ deliberately perturbed model:** `m6/`, `m7/` and `m8/` all run at initialization
 diagnostic uses synthetic `U(−1, 1)` returns rather than predictions, `m5/`'s world model saw only
 uniform-random data, and `m9/`'s gate returns describe a ~1,200-step agent.
 
-**The random-policy return floor is still unrecorded**, and so is the environment throughput
-benchmark. `scripts/m1_random_floor.py` has been repaired (it was a copy of the throughput script
-and never accumulated a reward) but has not yet been run. **Until it is, neither pilot curve can be
-called improvement over the floor** — which is precisely what M9's gate requires, so **M9 stays
-open**. The 32.1 mean return recorded in `m5/` is a property of the collected random-policy data,
-not that floor.
+**The random-policy return floor is measured** ([`m1/`](m1/), 2026-09-20): Walker
+**32.21 ± 4.37**, Cartpole **24.17 ± 15.92**, 20 complete episodes each. **Both pilots clear it** —
+Walker's final checkpoint 16.1× its floor, Cartpole's 5.5×, with all 20 Cartpole evaluations above
+the floor mean and 19 above the best single random episode. **M9 still stays open**, because its
+clause also requires improvement persisting beyond a transient spike and Cartpole's does not
+consolidate. **Environment throughput (§10-6) remains the last M1 deferral outstanding.** The 32.110
+mean return recorded in `m5/` is a property of that milestone's collected data, not this floor — but
+it is uniform-random Walker at seed 100, and the floor is uniform-random Walker at seed 900, so their
+agreement to 0.3% (32.110 vs 32.205) is an independent corroboration that both measure the same
+distribution.
 
 **Every pilot return is 5 episodes from one training seed**, at fixed evaluation seeds 2000–2004
 with the policy acting on the distribution mean. The core hypothesis is specified on 20 episodes at

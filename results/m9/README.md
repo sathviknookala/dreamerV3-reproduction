@@ -10,8 +10,11 @@ H=15. Walker Walk improves from a 29.6 five-evaluation opening mean to 542.7 ove
 consolidates at 457–555 after 850K steps; **Cartpole Swingup does not consolidate**, decaying from a
 217.2 peak at 350K to 132.6 at its 500K budget.
 
-**M9 stays open.** Its gate requires *both* pixel tasks to show sustained improvement over the M1
-random floor, and **that floor is still unrecorded**.
+**The M1 random floor is now measured** (Walker 32.21 ± 4.37, Cartpole 24.17 ± 15.92 —
+[`../m1/`](../m1/)) and **both tasks clear it**: Walker's final checkpoint is 16.1× its floor,
+Cartpole's 5.5×, with all 20 Cartpole evaluations above the floor mean. **M9 stays open** on the
+other half of the clause — the improvement must persist beyond a transient spike, and Cartpole's
+does not consolidate.
 
 ## What is here
 
@@ -128,9 +131,9 @@ columns, and `evaluations.jsonl` records each evaluation's own seconds and steps
 
 ## What none of this establishes
 
-- **No floor comparison.** The M1 random floor has still not been recorded, so neither pilot curve
-  can be described as improvement *over the floor* — which is exactly what M9's gate requires.
-  [`pilot/`](pilot/) has the returns; nothing here has the floor.
+- **Clearing the floor is not the gate.** The floor is measured and both tasks clear it, but M9's
+  clause also requires improvement persisting beyond a transient spike, and Cartpole's does not.
+  [`pilot/`](pilot/) has the full comparison.
 - **The gate and profile numbers remain untrained-model measurements.** The pilots do not
   retroactively qualify them.
 - **The gate's evaluation returns describe a ~1,200-step agent.**

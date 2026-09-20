@@ -5,10 +5,10 @@ development seed 100, H=15, 64×64 pixels, no privileged simulator state. Walker
 1,000,000 control steps; Cartpole Swingup reached 500,000. Both completed their budget and wrote a
 final model checkpoint.
 
-**M9 does not close on these runs.** Its gate requires *both* pixel tasks to show sustained
-improvement over the M1 random floor. Walker improves and consolidates; **Cartpole does not
-consolidate**, and **the random floor is still unrecorded**, so no claim of clearing a floor is
-available for either task yet.
+**Both tasks clear the M1 random floor, measured 2026-09-20** (Walker 32.21 ± 4.37, Cartpole
+24.17 ± 15.92 — [`../../m1/`](../../m1/)). Walker's final checkpoint is **16.1×** its floor;
+Cartpole's is **5.5×**. **M9 still does not close on these runs**, because its gate also requires the
+improvement to persist beyond a transient spike: Walker's does, **Cartpole's does not consolidate**.
 
 ## What is here
 
@@ -126,15 +126,42 @@ This is **not** a perception failure: final `rec` is **3.38** against Walker's 2
 against Walker's 25.78 and 169.62.
 
 Cartpole is the *validation* task, chosen as the easier of the two, and it is the one that failed to
-consolidate. Whether that is a task-specific exploration problem (swingup pays almost nothing until
+consolidate — though it clears its floor throughout, so this is an instability, not a failure to
+learn. Whether that is a task-specific exploration problem (swingup pays almost nothing until
 the pole is up, so the actor has little advantage signal) or a configuration defect shared with
 Walker is **not determined by these runs** — Cartpole inherits Walker's H=15, update ratio 64 and
 every other setting unchanged.
 
+## Against the measured random floor
+
+Floors from [`../../m1/random-floor-{walker,cartpole}-2026-09-20.json`](../../m1/): Walker
+**32.21 ± 4.37** (best single random episode 47.34), Cartpole **24.17 ± 15.92** (best 63.90).
+
+| | Walker | Cartpole |
+|---|---|---|
+| evaluations above floor mean | 37 / 40 | **20 / 20** |
+| above the best random episode | 35 / 40 | **19 / 20** (only 275K's 57.2 is not) |
+| first evaluation above the best random episode | **150K** | **25K** |
+| final checkpoint vs floor | 517.1 = **16.1×**, 111 floor-sd above | 132.6 = **5.5×**, 6.8 floor-sd above |
+| best evaluation vs floor | 554.9 = **17.2×** | 217.2 = **9.0×** |
+| last ten evaluations, mean vs floor | 444.7 = **13.8×** | 140.1 = **5.8×** |
+
+**This reframes Cartpole.** It is not failing to learn — it is above its floor at *every* evaluation
+from 25K onward, and even the flat 72–79 band is ~3× the floor. What it fails to do is *consolidate*:
+it reaches a modest level almost immediately, holds it for 200K steps, spikes three times and decays.
+Walker is the opposite shape — it **starts below its floor** (23.8 and 15.1 at 25K and 50K against a
+floor of 32.21) and does not clear the best random episode until 150K, but once it climbs it keeps
+climbing and then locks in.
+
+Read Cartpole against `return_max` rather than the mean. Its floor has sd 15.92 with one random
+episode at 63.90, so its 72–79 band is only just clear of chance; Walker's floor is tight
+(sd 4.37, max 47.34) and the same band would be decisively clear.
+
 ## What these runs do not establish
 
-- **No floor comparison.** `scripts/m1_random_floor.py` has still not been run. Neither curve can
-  yet be described as improvement *over the random floor*, which is what M9's gate requires.
+- **The floor is a bound, not a baseline.** Clearing it is necessary and not remotely sufficient.
+  The project's comparison point is the pinned author implementation under matched wrappers and data
+  budget ([experiment.md](../../../docs/experiment.md)), which has not been run.
 - **Every return here is 5 episodes, not 20.** The core hypothesis is specified on 20 evaluation
   episodes at the final checkpoint. These are pilot estimates at a fifth of that resolution.
 - **`return_std` is not across-seed variability.** It is the population sd over 5 non-independent

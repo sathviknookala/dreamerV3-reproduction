@@ -35,7 +35,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [results/m5/](results/m5/) | Before quoting an open-loop number, a training-run cost, or touching the prediction path. The M5 gate, the open-loop reward-MAE curve against both baselines, and the paired filmstrips. |
 | [results/m4/](results/m4/) | Before quoting a parameter count, a loss value, or touching the world model. The M4 gate, the overfit curve, and the measured world-model `sum(p.numel())`. |
 | [results/m2m3/](results/m2m3/) | Before touching the RSSM. The M2+M3 gate output and the measured RSSM + encoder parameter count. |
-| [results/m1/](results/m1/) | Environment and compute verification: the two check suites, their outputs, and the captured manifest. Re-run them after any dependency change. |
+| [results/m1/](results/m1/) | Environment and compute verification, **and the random-policy return floor** — Walker 32.21 ± 4.37, Cartpole 24.17 ± 15.92, 20 episodes each. Read before comparing any agent return to chance. Re-run the two check suites after any dependency change. |
 
 The original `dreamerv3_implementation_plan.md` was split into the four docs above; it is preserved
 unmodified at commit `da9a55a` and no longer exists in the tree, so there is one copy of each claim.
@@ -199,10 +199,12 @@ model? No directional prediction is made. Improvement, plateau, decline, and no 
 n=3 are all reportable outcomes; a null result with clear measurement and stated limitations is a
 valid deliverable. Stating a direction now would only create pressure to find it.
 
-**What it cannot claim.** Runtime is now measured and the first returns exist
-([results/m9/pilot/](results/m9/pilot/)), but they are **pilot returns at one development seed over
-five evaluation episodes**, with **no random floor to compare against** — not a result under this
-hypothesis, which is specified on 20 episodes across seeds 0/1/2. The parameter count
+**What it cannot claim.** Runtime is measured, the first returns exist
+([results/m9/pilot/](results/m9/pilot/)) and both clear the M1 floor — but they are **pilot returns
+at one development seed over five evaluation episodes**, and the hypothesis is specified on **20
+episodes at the final checkpoint across seeds 0/1/2, with the margin compared to the across-seed
+standard deviation**. A five-episode spread from a single run is not that quantity, so the hypothesis
+remains untested. The parameter count
 is now **measured end to end**: `sum(p.numel())` over the world model is **570,419**
 ([results/m4/](results/m4/)), `val` **66,111** ([results/m7/](results/m7/)) and `pol` **50,316**
 ([results/m8/](results/m8/)), each equal to its §4.11 derivation, for a measured trainable total of
@@ -387,8 +389,9 @@ code already says creates drift.
 
 ## Current Focus
 
-**M9 — Walker learns, Cartpole does not. M9 is OPEN.** M0 closed 2026-09-17; M1, the merged
-**M2+M3**, **M4**, **M5**, **M6** and **M7** closed 2026-09-18; **M8 closed 2026-09-19**. M9's
+**M9 — both pilots clear the random floor; only Walker consolidates. M9 is OPEN.** M0 closed
+2026-09-17; M1, the merged **M2+M3**, **M4**, **M5**, **M6** and **M7** closed 2026-09-18;
+**M8 closed 2026-09-19**. M9's
 infrastructure is gate-validated, and as of **2026-09-20 two full-budget pilots exist**
 ([results/m9/pilot/](results/m9/pilot/)) at seed 100, H=15, run concurrently on the one card:
 
@@ -399,41 +402,45 @@ infrastructure is gate-validated, and as of **2026-09-20 two full-budget pilots 
   `return_std` under 1.5; three excursions; peak **217.2 ± 16.7** at 350K decaying to
   **132.6 ± 27.5** at budget. **No consolidation.**
 
-This is the first evidence the implementation learns visual control at all, which retires the risk
-that some component is silently broken for every task. It does **not** close M9: the gate needs
-*both* tasks, and **the M1 random-policy floor is still unrecorded**, so neither curve can yet be
-called improvement over a floor.
+**The random floor is measured** ([results/m1/](results/m1/), 2026-09-20): Walker **32.21 ± 4.37**,
+Cartpole **24.17 ± 15.92**, 20 complete episodes each. **Both tasks clear it.** Walker's final
+checkpoint is **16.1×** its floor; Cartpole's is **5.5×**, with **20/20** evaluations above the floor
+mean and 19/20 above the best single random episode — even its flat 72–79 band is ~3× chance.
+Walker's shape is the opposite: it *starts below* its floor and first clears the best random episode
+at 150K.
+
+**So Cartpole is not failing to learn — it is failing to consolidate.** That is a materially weaker
+problem than it looked before the floor existed, and it is why M9 is still open: the gate's clause is
+improvement *persisting beyond a transient spike*, not merely exceeding chance.
 
 **M9 closes only when all five hold:** both pixel tasks show sustained improvement over the random
-floor (**Walker yes, Cartpole no, floor unmeasured**), resume works (**done**), H=30 has measured
+floor (**floor measured and both clear it; Walker persists, Cartpole does not**), resume works
+(**done**), H=30 has measured
 memory headroom (**done**, 2373.8 MiB of 23,986), campaign costs are measured (**done**,
 ≈52 GPU-hours), and the configuration in [docs/config.md](docs/config.md) is frozen (**not done**).
 
 Next, in order:
 
-1. **Random floors, both tasks.** Nothing can be concluded from either pilot without them. These
-   build no torch model, so they are CPU-bound and will not contend for the GPU:
-   ```bash
-   PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task cartpole --env-seed 901 --policy-seed 901 --episodes 20 --output results/m1/random-floor-cartpole-$(date +%F).json --video results/m1/random-cartpole-$(date +%F).mp4
-   PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task walker   --env-seed 900 --policy-seed 900 --episodes 20 --output results/m1/random-floor-walker-$(date +%F).json   --video results/m1/random-walker-$(date +%F).mp4
-   ```
-2. **Throughput, both tasks** — the last M1 deferral:
+1. **Throughput, both tasks** — the last M1 deferral outstanding (the floor and the random-policy
+   video are **done**). Builds no torch model, so it is CPU-bound:
    ```bash
    PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py --task walker   --env-seed 902 --policy-seed 902 --steps 10000 --output results/m1/throughput-walker-$(date +%F).json
    PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py --task cartpole --env-seed 903 --policy-seed 903 --steps 10000 --output results/m1/throughput-cartpole-$(date +%F).json
    ```
-3. **Re-evaluate both `model-final.pt` at 20 episodes.** Every pilot return is 5 episodes; the core
+   **Paste these as one line each** — a wrapped paste splits `--output` from its value, and argparse
+   then fails while bash tries to execute the path.
+2. **Re-evaluate both `model-final.pt` at 20 episodes.** Every pilot return is 5 episodes; the core
    hypothesis is specified on 20. **No standalone checkpoint-evaluation entry point exists** —
    `model-final.pt` is loaded only by `m9_train.py` and `m9_gate.py`, neither of which re-evaluates
    a finished run. One needs writing against `src/dreamer/evaluation.py`.
-4. **Diagnose Cartpole** — this is milestone step M9-4, and it is now active. Its world model is not
+3. **Diagnose Cartpole** — this is milestone step M9-4, and it is now active. Its world model is not
    the suspect: final `rec` **3.38** against Walker's 23.50, `reward_mae` 0.076. Its
    `value_value_mean` reached only **46.79** against Walker's 169.62. It inherits Walker's H=15 and
    update ratio 64 unchanged, so **task-specific exploration and a shared configuration defect are
    not yet separated.** Change one thing at a time and repeat the affected gates.
-5. Re-run the M5 open-loop diagnostics against a pilot checkpoint, now that online learning has
+4. Re-run the M5 open-loop diagnostics against a pilot checkpoint, now that online learning has
    broadened the replay distribution away from uniform-random data.
-6. Freeze [docs/config.md](docs/config.md).
+5. Freeze [docs/config.md](docs/config.md).
 
 Launch any further run detached with the sandbox disabled and **read the `device:` line** before
 walking away. Resume from a boundary checkpoint with
@@ -442,13 +449,13 @@ walking away. Resume from a boundary checkpoint with
 Development seeds are **100–102**. **Final training seeds 0–2 and final evaluation seeds 1000–1019
 stay unused** until M10.
 
-**Deferred from M1 and still outstanding:** random-policy return floor, throughput benchmark,
-random-policy video. **Steps 1–2 discharge all three.**
+**Deferred from M1:** the random-policy return floor and the random-policy video are **discharged**
+2026-09-20 ([results/m1/](results/m1/)). **The throughput benchmark (§10-6) is the last one left.**
 
 ## Last Session
 
-**Session 14 — ran the first two full-budget pilots to completion. Walker learns visual control;
-Cartpole does not consolidate. M9 remains OPEN.**
+**Session 14 — ran the first two full-budget pilots to completion and measured the random floor.
+Both tasks clear the floor; only Walker consolidates. M9 remains OPEN.**
 
 - **Two full-budget pilots finished cleanly**, concurrently on the one RTX PRO 4000: Walker 1M steps
   / 62,187 optimizer steps / 20,197.7 s, Cartpole 500K / 30,937 / 11,069.5 s. Both hit budget, wrote
@@ -465,6 +472,12 @@ Cartpole does not consolidate. M9 remains OPEN.**
 - **Both pilot logs predate commit `a0bc33b` by ~2 h**, so they carry **no `segment` column** and the
   documented dedupe rule does not apply to them. Neither run resumed, so no row is duplicated. Noted
   in both `results/m9/README.md` and the pilot README so a future plot does not key on a null field.
+- **Then measured the random floor, which corrected the Cartpole verdict.** Walker 32.21 ± 4.37,
+  Cartpole 24.17 ± 15.92 ([results/m1/](results/m1/)), discharging §10-5 and the random-policy video.
+  **Cartpole clears its floor at all 20 evaluations and ends at 5.5× chance**, so the first framing —
+  committed in `df8e6ed` as "Walker learns, Cartpole does not" — was wrong and is corrected across
+  the docs: Cartpole fails to *consolidate*, not to learn. Corroboration: M5's 32.110 random-policy
+  Walker mean (seed 100) and this floor's 32.205 (seed 900) agree to 0.3%.
 
 
 ## Known Issues
@@ -503,13 +516,14 @@ Cartpole does not consolidate. M9 remains OPEN.**
   hold imagination cost, critic arithmetic and policy arithmetic measured on an **untrained** model;
   `results/m9/`'s gate returns describe a ~1,200-step agent and are a smoke signal. Do not quote any
   of those as a property of the trained agent.
-- **Cartpole, the easier validation task, is the one that failed to learn.** Walker consolidates at
-  457–555; Cartpole peaks at 217.2 and decays to 132.6. Before assuming a Cartpole-specific
+- **Cartpole fails to *consolidate*, not to learn.** It is above its floor at all 20 evaluations and
+  ends at 5.5× chance; what it never does is hold a level. Before assuming a Cartpole-specific
   exploration problem, note that it inherits Walker's H=15 and update ratio 64 unchanged — a shared
   configuration defect is not ruled out, and neither explanation is tested.
-- **No random floor exists, so no pilot return can be called improvement over one.** Both M9's gate
-  and the core hypothesis are stated against that floor. `scripts/m1_random_floor.py` is repaired
-  and ready; it has never been run.
+- **Cartpole's floor is noisy: sd 15.92 on a mean of 24.17, with one random episode at 63.90.**
+  Walker's is tight (4.37 on 32.21, max 47.34). So a Cartpole return in the 60s is *not* clearly
+  above chance while a Walker return in the 60s is — compare Cartpole against `return_max`, not the
+  mean. This is why Cartpole's 72–79 band reads as "barely above chance" rather than "learning".
 - **`scripts/m9_gate.py` is implementation validation, NOT the M9 validation gate.** It proves the
   loop is wired as specified. M9's actual gate is empirical: both pixel tasks must show sustained
   improvement over the random floor. Do not read 75/75 as M9 closing.

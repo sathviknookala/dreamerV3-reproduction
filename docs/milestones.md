@@ -20,7 +20,7 @@ configuration are recorded** — not when the code runs.
 | **M6** | **CLOSED 2026-09-18.** Gate passed 55/55 plus 29 unit tests. Evidence: [`results/m6/`](../results/m6/). |
 | **M7** | **CLOSED 2026-09-18.** Gate passed 36/36 plus 45 unit tests. Evidence: [`results/m7/`](../results/m7/). |
 | **M8** | **CLOSED 2026-09-19.** Gate passed 63/63 plus 38 unit tests; `pol` measured at 50,316 and the agent total at 686,846. Evidence: [`results/m8/`](../results/m8/). |
-| **M9** | **ACTIVE — first pilots run; Walker learns, Cartpole does not consolidate.** Infrastructure is gate-validated (75/75 each task, 79 unit tests, 22/22 mutants). Two full-budget pilots at seed 100, H=15 now exist: Walker 1M steps, 29.6 → **542.7** last-five mean, final **517.1 ± 61.3**; Cartpole 500K steps, peaks **217.2** at 350K and decays to **132.6**. Evidence: [`results/m9/pilot/`](../results/m9/pilot/). **Not closed:** Cartpole shows no sustained improvement, the M1 random floor is still unrecorded, and the configuration is not frozen. |
+| **M9** | **ACTIVE — first pilots run; both clear the floor, only Walker consolidates.** Infrastructure is gate-validated (75/75 each task, 79 unit tests, 22/22 mutants). Two full-budget pilots at seed 100, H=15: Walker 1M steps, 29.6 → **542.7** last-five mean, final **517.1 = 16.1× its floor**; Cartpole 500K steps, peaks **217.2** at 350K and decays to **132.6 = 5.5× its floor**, with all 20 evaluations above the floor mean. Evidence: [`results/m9/pilot/`](../results/m9/pilot/), floors in [`results/m1/`](../results/m1/). **Not closed:** Cartpole never consolidates, and the configuration is not frozen. |
 | M10 | Not started. |
 
 Every component of the agent — the environment contract, the RSSM state-transition core, the
@@ -373,9 +373,9 @@ Resolved while implementing, and recorded because a later session would otherwis
 **Qualification sequence:**
 
 1. Run the complete learning path under development seeds, with diagnostic evaluation every 25,000 control steps using five evaluation episodes. **DONE** — [`results/m9/pilot/`](../results/m9/pilot/), seed 100, both tasks at full budget, 5.61 h and 3.07 h concurrent on one card.
-2. Verify that learning persists beyond a transient return spike and that each task improves over the random floor. **PARTIAL.** Walker persists: it consolidates at 457–555 over its last six evaluations with `return_std` falling to 24–38, which is not a transient spike. **Cartpole is exactly the failure this clause screens for** — three excursions (175.1 at 75K, 129.2 at 250K, 217.2 at 350K), the first two collapsing back to a 72–79 band, and a decay to 132.6 at budget. And **the floor is still unrecorded**, so the second half of the clause is untested for either task; `scripts/m1_random_floor.py` is repaired and ready.
+2. Verify that learning persists beyond a transient return spike and that each task improves over the random floor. **PARTIAL — the floor half is DONE, the persistence half is not.** The floor is measured ([`results/m1/`](../results/m1/), 2026-09-20): Walker **32.21 ± 4.37**, Cartpole **24.17 ± 15.92**. **Both tasks clear it** — Walker's final checkpoint 16.1× and its last ten evaluations 13.8×; Cartpole's final 5.5×, with 20/20 evaluations above the floor mean and 19/20 above the best single random episode. **Walker's improvement persists** (457–555 over its last six evaluations, `return_std` down to 24–38). **Cartpole's does not consolidate** — three excursions (175.1 at 75K, 129.2 at 250K, 217.2 at 350K), the first two collapsing back to a 72–79 band, then a decay to 132.6. It is above chance throughout; it is simply unstable.
 3. Profile collection, rendering, replay transfer, world-model updates, and behavior updates. Measure representative H=30 peak memory. Estimate final-run cost from steady-state measurements, including evaluation overhead. **DONE** — [`results/m9/profile-walker-2026-09-19.csv`](../results/m9/profile-walker-2026-09-19.csv); H=30 peak 2373.8 MiB allocated in a steady-state update, ~22 GB headroom; the 12-run campaign derives to ≈52 GPU-hours.
-4. If learning stalls, inspect replay alignment, reward/value scaling, latent information, prior error, update ratio, and capacity before changing several settings at once. Repeat affected validation gates after fixes. **ACTIVE — this is where Cartpole now sits.** Its world model is not the suspect: final `rec` is 3.38 against Walker's 23.50 and `reward_mae` is 0.076. Its `value_value_mean` reached only 46.79 against Walker's 169.62. Cartpole inherits Walker's H=15 and update ratio 64 unchanged, so a task-specific exploration problem and a shared configuration defect are **not yet separated**.
+4. If learning stalls, inspect replay alignment, reward/value scaling, latent information, prior error, update ratio, and capacity before changing several settings at once. Repeat affected validation gates after fixes. **ACTIVE — this is where Cartpole now sits: it stalls above the floor rather than at it.** Its world model is not the suspect: final `rec` is 3.38 against Walker's 23.50 and `reward_mae` is 0.076. Its `value_value_mean` reached only 46.79 against Walker's 169.62. Cartpole inherits Walker's H=15 and update ratio 64 unchanged, so a task-specific exploration problem and a shared configuration defect are **not yet separated**.
 5. Where feasible, run the pinned author implementation with the same task wrappers and approximate capacity/data budget to qualify the setup. A single reference run is a diagnostic, not a statistical performance benchmark. **PENDING.**
 6. Finalize architecture, training ratio, replay handling, precision, budgets, evaluation policy, and shared hyperparameters. Create a run manifest before executing final seeds. **PENDING** — [config.md](config.md) is **not frozen**.
 
@@ -387,9 +387,10 @@ Three of the four clauses are discharged. **Checkpoint/resume works** (75/75, bo
 still not discharged, so the gate has not passed and M10 does not start.**
 
 Walker is the first evidence in the project that the implementation learns visual control at all,
-which retires the risk that some component is silently broken for every task. It does not discharge
-the clause: **Cartpole, the easier validation task, is the one that failed**, and no random floor
-exists to measure either curve against.
+which retires the risk that some component is silently broken for every task. With the floor now
+measured, **both tasks are above chance** — so the remaining question is not whether Cartpole learns
+but whether its improvement *persists*, and it does not. **Cartpole, the easier validation task, is
+the one that fails to consolidate**, and until it does, the clause is not discharged.
 
 The integration gate `scripts/m9_gate.py` is **not** the validation gate. It is implementation
 validation: it proves the loop is wired as specified. Its evaluation returns come from a policy
