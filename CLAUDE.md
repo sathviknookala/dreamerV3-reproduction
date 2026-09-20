@@ -29,6 +29,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
 | [results/m9/](results/m9/) | Before quoting a runtime, a per-stage share, a memory figure or a campaign cost, and before touching the online loop, checkpointing or evaluation. The M9 integration gate (75/75 on each task), the per-stage profile at H = 5/15/30, the checkpoint cost, and what none of it establishes. |
 | [results/m9/pilot/](results/m9/pilot/) | **Before quoting any return for a trained agent.** The two full-budget pilots at seed 100, H=15 — Walker's learning curve, Cartpole's failure to consolidate, both raw logs, and the limits on reading either. |
+| [results/m9/controls/](results/m9/controls/) | **Before comparing a trained agent to anything.** The four-policy controls on matched initial conditions (20 episodes each, seeds 3000–3019) and the open-loop diagnostic that found Cartpole's reward predictions action-independent. |
 | [results/m8/](results/m8/) | Before quoting an entropy, a log-probability, a normalization scale or a parameter count, or touching the policy path. The M8 gate, the `tarval` and `debias` resolutions, and the REINFORCE direction check. |
 | [results/m7/](results/m7/) | Before quoting a value, a λ-return or a critic parameter count, or touching the return path. The M7 gate, the three readings of γ, and the value-vs-target fit. |
 | [results/m6/](results/m6/) | Before quoting an imagination cost or touching the rollout path. The M6 gate, the per-horizon cost/memory table, and what those numbers exclude. |
@@ -413,6 +414,19 @@ at 150K.
 problem than it looked before the floor existed, and it is why M9 is still open: the gate's clause is
 improvement *persisting beyond a transient spike*, not merely exceeding chance.
 
+**The controls confirm it** ([results/m9/controls/](results/m9/controls/), 2026-09-20). Each final
+checkpoint against an untrained agent, a zero-action policy and a uniform-random policy on *matched*
+initial conditions, seeds 3000–3019, 20 episodes each, ~180 s per task: **Walker 539.50 ± 42.80** and
+**Cartpole 153.57 ± 29.00** win **20/20 paired episodes** against all three. Cartpole beating the
+zero-action policy on every episode rules out "it merely idles". Note the untrained and zero
+conditions are **one control, not two** — `pol` at `outscale: 0.01` with `tanh` on the mean makes an
+untrained agent a zero-action policy.
+
+**The open-loop control is the first mechanical lead on Cartpole:** its reward predictions are
+**action-independent** — shuffled-action MAE equals true-action MAE to four decimals at every
+distance — where Walker's degrade **2.5×** by k=30. That is confounded, because the Cartpole policy's
+own actions barely vary, so shuffling is nearly a no-op.
+
 **M9 closes only when all five hold:** both pixel tasks show sustained improvement over the random
 floor (**floor measured and both clear it; Walker persists, Cartpole does not**), resume works
 (**done**), H=30 has measured
@@ -429,18 +443,15 @@ Next, in order:
    ```
    **Paste these as one line each** — a wrapped paste splits `--output` from its value, and argparse
    then fails while bash tries to execute the path.
-2. **Re-evaluate both `model-final.pt` at 20 episodes.** Every pilot return is 5 episodes; the core
-   hypothesis is specified on 20. **No standalone checkpoint-evaluation entry point exists** —
-   `model-final.pt` is loaded only by `m9_train.py` and `m9_gate.py`, neither of which re-evaluates
-   a finished run. One needs writing against `src/dreamer/evaluation.py`.
-3. **Diagnose Cartpole** — this is milestone step M9-4, and it is now active. Its world model is not
-   the suspect: final `rec` **3.38** against Walker's 23.50, `reward_mae` 0.076. Its
-   `value_value_mean` reached only **46.79** against Walker's 169.62. It inherits Walker's H=15 and
-   update ratio 64 unchanged, so **task-specific exploration and a shared configuration defect are
-   not yet separated.** Change one thing at a time and repeat the affected gates.
-4. Re-run the M5 open-loop diagnostics against a pilot checkpoint, now that online learning has
-   broadened the replay distribution away from uniform-random data.
-5. Freeze [docs/config.md](docs/config.md).
+2. **Diagnose Cartpole** — milestone step M9-4, now active, and the one open question. Reconstruction
+   is not the suspect (`rec` 3.38 against Walker's 23.50); `value_value_mean` reached only 46.79
+   against Walker's 169.62. Start with the lead the controls produced, because it is testable:
+   **re-run the open-loop diagnostic on data with deliberate action variation** (uniform-random or
+   perturbed actions) against the trained Cartpole world model. Equal shuffled-vs-true error there
+   would mean the *model* ignores actions; a gap would mean the *policy* has no variation to shuffle.
+   Only then change a setting, one at a time, repeating the affected gates. Cartpole inherits
+   Walker's H=15 and update ratio 64 unchanged, so a shared configuration defect is not ruled out.
+3. Freeze [docs/config.md](docs/config.md).
 
 Launch any further run detached with the sandbox disabled and **read the `device:` line** before
 walking away. Resume from a boundary checkpoint with
@@ -454,24 +465,26 @@ stay unused** until M10.
 
 ## Last Session
 
-**Session 14 — ran the first two full-budget pilots to completion and measured the random floor.
-Both tasks clear the floor; only Walker consolidates. M9 remains OPEN.**
+**Session 14 — ran the first two full-budget pilots, measured the random floor, and ran the
+four-policy qualification controls. Both tasks beat every control 20/20; only Walker consolidates.
+M9 remains OPEN.**
 
 - **Two full-budget pilots finished cleanly**, concurrently on the one RTX PRO 4000: Walker 1M steps
   / 62,187 optimizer steps / 20,197.7 s, Cartpole 500K / 30,937 / 11,069.5 s. Both hit budget, wrote
   `model-final.pt` and a manifest, and ended with replay at its 500,000 capacity and 500 complete
   episodes — the predicted eviction behaviour. Evaluation was 3.2% and 3.0% of wall clock.
 - **Walker is the project's first learning result:** 29.6 → 542.7 comparing first and last five
-  evaluations, consolidating at 457–555 after 850K. Its actor did **not** collapse to `minstd`
-  (final entropy +2.78) and `policy_retnorm_scale` left its floor of 1.0 for 25.78.
-- **Cartpole is the failure to investigate**, and it is the *easier* validation task. Its perception
-  is fine; its critic barely grew. Recorded as milestone step M9-4 rather than diagnosed here.
-- **The pilot artifacts are committed to [results/m9/pilot/](results/m9/pilot/)** — evaluations,
-  per-update logs, manifests and configs — because `runs/` is gitignored and no number may be quoted
-  from an uncommitted file.
-- **Both pilot logs predate commit `a0bc33b` by ~2 h**, so they carry **no `segment` column** and the
-  documented dedupe rule does not apply to them. Neither run resumed, so no row is duplicated. Noted
-  in both `results/m9/README.md` and the pilot README so a future plot does not key on a null field.
+  evaluations, consolidating at 457–555 after 850K, actor entropy +2.78 (no `minstd` collapse).
+  **Cartpole is the failure to investigate** — the *easier* validation task, perception fine, critic
+  barely grown. Artifacts in [results/m9/pilot/](results/m9/pilot/), since `runs/` is gitignored and
+  no number may be quoted from an uncommitted file. Both pilot logs **predate commit `a0bc33b`**, so
+  they carry no `segment` column and the documented dedupe rule does not apply to them.
+- **Built `scripts/m9_controls.py` and ran the qualification controls**
+  ([results/m9/controls/](results/m9/controls/)): trained / untrained / zero-action / uniform-random
+  on matched initial conditions, seeds 3000–3019, 160 episodes per task in ~180 s, two detached
+  workers on one card. **20/20 paired wins on both tasks.** The open-loop diagnostic found Walker's
+  world model action-conditional and **Cartpole's reward predictions action-independent** — the first
+  mechanical lead on the consolidation failure, though confounded by that policy's flat actions.
 - **Then measured the random floor, which corrected the Cartpole verdict.** Walker 32.21 ± 4.37,
   Cartpole 24.17 ± 15.92 ([results/m1/](results/m1/)), discharging §10-5 and the random-policy video.
   **Cartpole clears its floor at all 20 evaluations and ends at 5.5× chance**, so the first framing —
@@ -516,8 +529,15 @@ Both tasks clear the floor; only Walker consolidates. M9 remains OPEN.**
   hold imagination cost, critic arithmetic and policy arithmetic measured on an **untrained** model;
   `results/m9/`'s gate returns describe a ~1,200-step agent and are a smoke signal. Do not quote any
   of those as a property of the trained agent.
-- **Cartpole fails to *consolidate*, not to learn.** It is above its floor at all 20 evaluations and
-  ends at 5.5× chance; what it never does is hold a level. Before assuming a Cartpole-specific
+- **The untrained-agent control is a zero-action policy, not an independent baseline.** `pol` at
+  `outscale: 0.01` with `tanh` on the mean gives an untrained agent a mean action of ≈0. Cartpole's
+  two controls read 0.01 and 0.01; Walker's differ by 1.0 out of 539. Treat them as one control.
+- **Cartpole's shuffled-action open-loop control is vacuous on its own policy's data.** Shuffling a
+  nearly constant action sequence is nearly a no-op, so equal shuffled and true-action error does not
+  by itself prove the model ignores actions. Any rerun must supply data with real action variation.
+- **Cartpole fails to *consolidate*, not to learn.** It is above its floor at all 20 evaluations,
+  ends at 5.5× chance, and beats the zero-action policy on 20/20 matched episodes; what it never does
+  is hold a level. Before assuming a Cartpole-specific
   exploration problem, note that it inherits Walker's H=15 and update ratio 64 unchanged — a shared
   configuration defect is not ruled out, and neither explanation is tested.
 - **Cartpole's floor is noisy: sd 15.92 on a mean of 24.17, with one random episode at 63.90.**

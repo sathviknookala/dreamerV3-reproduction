@@ -1,0 +1,90 @@
+device: cuda  torch: 2.13.0+cu129  cuda: True
+task: walker  seed: 100  horizon: 15  action_dim: 6
+parameters: world model 570419  actor 50316  critic 66111  trainable total 686846
+checkpoint: runs/m9-walker-s100/model-final.pt sha256 f3e70a158c837614
+trained   seed 3000 return   439.18 length 1000 3.3s
+trained   seed 3001 return   540.33 length 1000 3.0s
+trained   seed 3002 return   587.31 length 1000 3.0s
+trained   seed 3003 return   526.02 length 1000 3.0s
+trained   seed 3004 return   490.13 length 1000 3.0s
+trained   seed 3005 return   520.26 length 1000 3.0s
+trained   seed 3006 return   511.92 length 1000 3.0s
+trained   seed 3007 return   580.73 length 1000 3.0s
+trained   seed 3008 return   476.14 length 1000 3.0s
+trained   seed 3009 return   570.80 length 1000 3.0s
+trained   seed 3010 return   575.39 length 1000 3.0s
+trained   seed 3011 return   547.27 length 1000 3.0s
+trained   seed 3012 return   532.18 length 1000 3.0s
+trained   seed 3013 return   578.77 length 1000 3.0s
+trained   seed 3014 return   579.21 length 1000 3.0s
+trained   seed 3015 return   580.51 length 1000 3.0s
+trained   seed 3016 return   475.07 length 1000 3.0s
+trained   seed 3017 return   539.49 length 1000 3.0s
+trained   seed 3018 return   598.56 length 1000 3.0s
+trained   seed 3019 return   540.63 length 1000 3.0s
+untrained seed 3000 return    16.04 length 1000 3.0s
+untrained seed 3001 return    22.33 length 1000 3.0s
+untrained seed 3002 return    23.15 length 1000 3.0s
+untrained seed 3003 return    22.59 length 1000 3.0s
+untrained seed 3004 return    38.92 length 1000 3.0s
+untrained seed 3005 return    23.35 length 1000 3.0s
+untrained seed 3006 return    15.52 length 1000 3.0s
+untrained seed 3007 return    11.18 length 1000 3.0s
+untrained seed 3008 return    19.22 length 1000 3.0s
+untrained seed 3009 return    13.58 length 1000 3.0s
+untrained seed 3010 return    10.98 length 1000 3.0s
+untrained seed 3011 return    22.66 length 1000 3.0s
+untrained seed 3012 return    10.34 length 1000 3.0s
+untrained seed 3013 return    38.72 length 1000 3.0s
+untrained seed 3014 return    20.82 length 1000 3.0s
+untrained seed 3015 return    15.19 length 1000 3.0s
+untrained seed 3016 return    32.59 length 1000 3.0s
+untrained seed 3017 return    22.57 length 1000 3.0s
+untrained seed 3018 return    22.34 length 1000 3.0s
+untrained seed 3019 return    22.79 length 1000 3.0s
+zero      seed 3000 return    16.35 length 1000 1.2s
+zero      seed 3001 return    22.32 length 1000 1.2s
+zero      seed 3002 return    23.19 length 1000 1.2s
+zero      seed 3003 return    22.58 length 1000 1.2s
+zero      seed 3004 return    39.35 length 1000 1.2s
+zero      seed 3005 return    23.30 length 1000 1.2s
+zero      seed 3006 return    15.56 length 1000 1.2s
+zero      seed 3007 return    11.05 length 1000 1.2s
+zero      seed 3008 return    21.80 length 1000 1.2s
+zero      seed 3009 return    14.21 length 1000 1.2s
+zero      seed 3010 return    11.30 length 1000 1.2s
+zero      seed 3011 return    22.71 length 1000 1.2s
+zero      seed 3012 return    10.25 length 1000 1.2s
+zero      seed 3013 return    19.15 length 1000 1.2s
+zero      seed 3014 return    20.60 length 1000 1.2s
+zero      seed 3015 return    10.91 length 1000 1.2s
+zero      seed 3016 return    32.34 length 1000 1.2s
+zero      seed 3017 return    22.57 length 1000 1.2s
+zero      seed 3018 return    22.35 length 1000 1.2s
+zero      seed 3019 return    22.84 length 1000 1.2s
+random    seed 3000 return    31.64 length 1000 1.2s
+random    seed 3001 return    29.80 length 1000 1.2s
+random    seed 3002 return    28.04 length 1000 1.2s
+random    seed 3003 return    30.03 length 1000 1.2s
+random    seed 3004 return    33.33 length 1000 1.2s
+random    seed 3005 return    30.20 length 1000 1.2s
+random    seed 3006 return    31.65 length 1000 1.2s
+random    seed 3007 return    33.63 length 1000 1.2s
+random    seed 3008 return    30.46 length 1000 1.2s
+random    seed 3009 return    38.68 length 1000 1.2s
+random    seed 3010 return    30.53 length 1000 1.2s
+random    seed 3011 return    32.53 length 1000 1.2s
+random    seed 3012 return    34.79 length 1000 1.2s
+random    seed 3013 return    40.56 length 1000 1.2s
+random    seed 3014 return    31.71 length 1000 1.2s
+random    seed 3015 return    32.17 length 1000 1.2s
+random    seed 3016 return    30.76 length 1000 1.2s
+random    seed 3017 return    29.39 length 1000 1.2s
+random    seed 3018 return    28.69 length 1000 1.2s
+random    seed 3019 return    41.40 length 1000 1.2s
+open-loop diagnostic on the trained trajectories
+trained   mean   539.50  sd   42.80  median   540.48  min   439.18  max   598.56
+untrained mean    21.24  sd    7.90  median    22.33  min    10.34  max    38.92
+zero      mean    20.24  sd    7.04  median    22.06  min    10.25  max    39.35
+random    mean    32.50  sd    3.64  median    31.64  min    28.04  max    41.40
+wrote runs/m9-controls/20260920T151336/walker/controls-report.json

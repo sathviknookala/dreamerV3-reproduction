@@ -12,9 +12,12 @@ consolidates at 457–555 after 850K steps; **Cartpole Swingup does not consolid
 
 **The M1 random floor is now measured** (Walker 32.21 ± 4.37, Cartpole 24.17 ± 15.92 —
 [`../m1/`](../m1/)) and **both tasks clear it**: Walker's final checkpoint is 16.1× its floor,
-Cartpole's 5.5×, with all 20 Cartpole evaluations above the floor mean. **M9 stays open** on the
-other half of the clause — the improvement must persist beyond a transient spike, and Cartpole's
-does not consolidate.
+Cartpole's 5.5×, with all 20 Cartpole evaluations above the floor mean. [`controls/`](controls/)
+goes further — on matched initial conditions both trained agents beat an untrained agent, a
+zero-action policy and a uniform-random policy on **20 of 20 paired episodes**.
+
+**M9 stays open** on the other half of the clause — the improvement must persist beyond a transient
+spike, and Cartpole's does not consolidate.
 
 ## What is here
 
@@ -26,6 +29,7 @@ does not consolidate.
 | [`profile-walker-2026-09-19.json`](profile-walker-2026-09-19.json) | The same run's device, flags, arguments and exclusions. |
 | [`checkpoint-cost-2026-09-19.json`](checkpoint-cost-2026-09-19.json) | Resume-checkpoint write/read at full 500,000-transition occupancy. |
 | [`pilot/`](pilot/) | The two full-budget pilot runs: evaluations, per-update logs, manifests, configs. **The first trained-agent returns in the project.** |
+| [`controls/`](controls/) | The four-policy qualification controls on matched initial conditions, 20 episodes per condition per task, plus the open-loop diagnostic on the trained trajectories. **The first controlled comparison of a trained agent.** |
 
 Reproduce with:
 
@@ -131,9 +135,10 @@ columns, and `evaluations.jsonl` records each evaluation's own seconds and steps
 
 ## What none of this establishes
 
-- **Clearing the floor is not the gate.** The floor is measured and both tasks clear it, but M9's
-  clause also requires improvement persisting beyond a transient spike, and Cartpole's does not.
-  [`pilot/`](pilot/) has the full comparison.
+- **Clearing the floor, and beating every control, is still not the gate.** M9's clause requires
+  improvement *persisting beyond a transient spike*. [`controls/`](controls/) measures end-of-run
+  checkpoints and says nothing about persistence; [`pilot/`](pilot/) has the curves, and Cartpole's
+  does not consolidate.
 - **The gate and profile numbers remain untrained-model measurements.** The pilots do not
   retroactively qualify them.
 - **The gate's evaluation returns describe a ~1,200-step agent.**

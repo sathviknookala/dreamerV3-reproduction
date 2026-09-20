@@ -1,0 +1,90 @@
+device: cuda  torch: 2.13.0+cu129  cuda: True
+task: cartpole  seed: 100  horizon: 15  action_dim: 1
+parameters: world model 570099  actor 49666  critic 66111  trainable total 685876
+checkpoint: runs/m9-cartpole-s100/model-final.pt sha256 c322cb56487a7d5c
+trained   seed 3000 return   143.94 length 1000 3.3s
+trained   seed 3001 return   143.97 length 1000 3.0s
+trained   seed 3002 return   146.92 length 1000 3.0s
+trained   seed 3003 return   150.42 length 1000 3.0s
+trained   seed 3004 return   143.37 length 1000 3.0s
+trained   seed 3005 return    86.01 length 1000 3.0s
+trained   seed 3006 return   141.95 length 1000 3.0s
+trained   seed 3007 return   143.59 length 1000 3.0s
+trained   seed 3008 return   149.99 length 1000 3.0s
+trained   seed 3009 return   230.44 length 1000 3.0s
+trained   seed 3010 return   195.42 length 1000 3.0s
+trained   seed 3011 return   145.38 length 1000 3.0s
+trained   seed 3012 return   142.08 length 1000 3.0s
+trained   seed 3013 return   150.18 length 1000 3.0s
+trained   seed 3014 return   159.65 length 1000 3.0s
+trained   seed 3015 return   145.56 length 1000 3.0s
+trained   seed 3016 return   146.26 length 1000 3.0s
+trained   seed 3017 return   145.25 length 1000 3.0s
+trained   seed 3018 return   213.06 length 1000 3.0s
+trained   seed 3019 return   147.94 length 1000 3.0s
+untrained seed 3000 return     0.00 length 1000 3.0s
+untrained seed 3001 return     0.00 length 1000 3.0s
+untrained seed 3002 return     0.03 length 1000 3.0s
+untrained seed 3003 return     0.04 length 1000 3.0s
+untrained seed 3004 return     0.01 length 1000 3.0s
+untrained seed 3005 return     0.03 length 1000 3.0s
+untrained seed 3006 return     0.01 length 1000 3.0s
+untrained seed 3007 return     0.00 length 1000 3.0s
+untrained seed 3008 return     0.01 length 1000 3.0s
+untrained seed 3009 return     0.00 length 1000 3.0s
+untrained seed 3010 return     0.00 length 1000 3.0s
+untrained seed 3011 return     0.03 length 1000 3.0s
+untrained seed 3012 return     0.00 length 1000 3.0s
+untrained seed 3013 return     0.01 length 1000 3.0s
+untrained seed 3014 return     0.01 length 1000 3.0s
+untrained seed 3015 return     0.01 length 1000 3.0s
+untrained seed 3016 return     0.00 length 1000 3.0s
+untrained seed 3017 return     0.02 length 1000 3.0s
+untrained seed 3018 return     0.02 length 1000 3.0s
+untrained seed 3019 return     0.01 length 1000 3.0s
+zero      seed 3000 return     0.00 length 1000 1.2s
+zero      seed 3001 return     0.00 length 1000 1.2s
+zero      seed 3002 return     0.01 length 1000 1.2s
+zero      seed 3003 return     0.01 length 1000 1.2s
+zero      seed 3004 return     0.00 length 1000 1.2s
+zero      seed 3005 return     0.05 length 1000 1.2s
+zero      seed 3006 return     0.00 length 1000 1.2s
+zero      seed 3007 return     0.00 length 1000 1.2s
+zero      seed 3008 return     0.01 length 1000 1.2s
+zero      seed 3009 return     0.00 length 1000 1.2s
+zero      seed 3010 return     0.00 length 1000 1.2s
+zero      seed 3011 return     0.01 length 1000 1.2s
+zero      seed 3012 return     0.01 length 1000 1.2s
+zero      seed 3013 return     0.00 length 1000 1.2s
+zero      seed 3014 return     0.03 length 1000 1.2s
+zero      seed 3015 return     0.00 length 1000 1.2s
+zero      seed 3016 return     0.00 length 1000 1.2s
+zero      seed 3017 return     0.01 length 1000 1.2s
+zero      seed 3018 return     0.01 length 1000 1.2s
+zero      seed 3019 return     0.00 length 1000 1.2s
+random    seed 3000 return    33.36 length 1000 1.2s
+random    seed 3001 return    17.30 length 1000 1.2s
+random    seed 3002 return    35.99 length 1000 1.2s
+random    seed 3003 return     5.43 length 1000 1.2s
+random    seed 3004 return    14.93 length 1000 1.2s
+random    seed 3005 return     4.92 length 1000 1.2s
+random    seed 3006 return    19.91 length 1000 1.2s
+random    seed 3007 return    17.74 length 1000 1.2s
+random    seed 3008 return    21.13 length 1000 1.2s
+random    seed 3009 return    14.05 length 1000 1.2s
+random    seed 3010 return    12.76 length 1000 1.2s
+random    seed 3011 return     4.45 length 1000 1.2s
+random    seed 3012 return    14.32 length 1000 1.2s
+random    seed 3013 return    19.36 length 1000 1.2s
+random    seed 3014 return    20.87 length 1000 1.2s
+random    seed 3015 return    16.88 length 1000 1.2s
+random    seed 3016 return     9.22 length 1000 1.2s
+random    seed 3017 return    10.65 length 1000 1.2s
+random    seed 3018 return    13.38 length 1000 1.2s
+random    seed 3019 return    12.02 length 1000 1.2s
+open-loop diagnostic on the trained trajectories
+trained   mean   153.57  sd   29.00  median   145.91  min    86.01  max   230.44
+untrained mean     0.01  sd    0.01  median     0.01  min     0.00  max     0.04
+zero      mean     0.01  sd    0.01  median     0.00  min     0.00  max     0.05
+random    mean    15.93  sd    7.96  median    14.63  min     4.45  max    35.99
+wrote runs/m9-controls/20260920T151336/cartpole/controls-report.json

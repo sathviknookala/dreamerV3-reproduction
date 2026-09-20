@@ -65,6 +65,14 @@ it is uniform-random Walker at seed 100, and the floor is uniform-random Walker 
 agreement to 0.3% (32.110 vs 32.205) is an independent corroboration that both measure the same
 distribution.
 
+And the **qualification controls** ([`m9/controls/`](m9/controls/), 2026-09-20): each pilot's final
+checkpoint against an untrained agent, a zero-action policy and a uniform-random policy on the *same*
+20 initial conditions (seeds 3000–3019), 160 episodes per task in ~180 s. **Walker 539.50 ± 42.80**
+and **Cartpole 153.57 ± 29.00** beat every control on **20 of 20 paired episodes**. The open-loop
+diagnostic on those trajectories shows Walker's world model is action-conditional (shuffling future
+actions degrades reward MAE 2.5× by k=30) while **Cartpole's reward predictions are
+action-independent** — confounded, because that policy's actions barely vary.
+
 **Every pilot return is 5 episodes from one training seed**, at fixed evaluation seeds 2000–2004
 with the policy acting on the distribution mean. The core hypothesis is specified on 20 episodes at
 the final checkpoint across training seeds 0/1/2; that is M10 work and none of it is done.
