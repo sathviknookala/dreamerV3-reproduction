@@ -24,6 +24,17 @@ class LaProp(torch.optim.Optimizer):
         )
         self._step = 0
 
+    def state_dict(self) -> dict:
+        # _step drives the bias correction and the lr warm-up; torch.optim does not carry it
+        state = super().state_dict()
+        state["_step"] = self._step
+        return state
+
+    def load_state_dict(self, state: dict) -> None:
+        state = dict(state)
+        self._step = int(state.pop("_step", 0))
+        super().load_state_dict(state)
+
     @torch.no_grad()
     def step(self, closure=None):
         loss = closure() if closure is not None else None

@@ -132,6 +132,28 @@ class ActorActionProvider:
     def __call__(self, state: State) -> Tensor:
         return self.actor(state.feat).sample(self._stream(state.deter.device))
 
+    def state_dict(self) -> dict:
+        """The private stream is not a buffer, so a resume that skips it redraws the rollout."""
+        generator = self._generator
+
+        return {
+            "seed": self.seed,
+            "generator": None if generator is None else generator.get_state(),
+            "device": None if generator is None else str(generator.device),
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        self.seed = int(state["seed"])
+        saved = state["generator"]
+
+        if saved is None:
+            self._generator = None
+            return
+
+        device = torch.device(state["device"])
+        self._generator = torch.Generator(device=device)
+        self._generator.set_state(saved)
+
 
 class ReturnNormalizer(nn.Module):
     """spec 5.6 `retnorm`: percentile EMAs of the imagined return, S = max(1, hi - lo).
@@ -205,6 +227,23 @@ class ReturnNormalizer(nn.Module):
     @property
     def scale(self) -> Tensor:
         return self.stats()[1]
+
+    def settings(self) -> dict[str, float | bool]:
+        """The buffers ride in state_dict(); the percentiles and `debias` do not."""
+        return {
+            "rate": self.rate,
+            "limit": self.limit,
+            "perclo": self.perclo,
+            "perchi": self.perchi,
+            "debias": self.debias,
+        }
+
+    def load_settings(self, settings: dict[str, float | bool]) -> None:
+        self.rate = float(settings["rate"])
+        self.limit = float(settings["limit"])
+        self.perclo = float(settings["perclo"])
+        self.perchi = float(settings["perchi"])
+        self.debias = bool(settings["debias"])
 
 
 @dataclass

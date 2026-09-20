@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 
-import numpy as np
+sys.path.insert(0, "src")
 
 from dreamer import DMCEnv, UniformRandomPolicy
 
 
-TASKS = {
-    "walker": ("walker", "walk"),
-    "cartpole": ("cartpole", "swingup"),
-}
+from dreamer.config import TASKS
 
 
 def main() -> None:
@@ -48,6 +46,9 @@ def main() -> None:
         required=True,
     )
     args = parser.parse_args()
+
+    if args.steps < 10_000:
+        raise SystemExit("throughput must be measured over at least 10,000 control steps")
 
     domain, task = TASKS[args.task]
 
@@ -104,6 +105,7 @@ def main() -> None:
         "elapsed_seconds": elapsed,
         "control_steps_per_second": args.steps / elapsed,
         "render": "64x64 RGB every control step",
+        "measures": "control steps per second only; the return floor is scripts/m1_random_floor.py",
     }
 
     with open(args.output, "w") as file:

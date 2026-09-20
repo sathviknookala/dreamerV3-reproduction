@@ -35,14 +35,21 @@ arithmetic and parameter count** ([`m7/`](m7/)): `val` measured at 66,111, the t
 separated at 14.688751 / 14.386389 / 15.000000, and a critic fit from 0.0000 to 0.3907 against a
 fixed target mean of 0.4029; and the **actor's arithmetic and parameter count** ([`m8/`](m8/)):
 `pol` measured at 50,316, closing the trainable agent total at **686,846 measured** with every
-module of [spec.md §4.11](../docs/spec.md) now equal to its derived figure.
+module of [spec.md §4.11](../docs/spec.md) now equal to its derived figure; and the **online loop's
+implementation validation and per-stage cost** ([`m9/`](m9/)): 75/75 integration checks on each of
+Cartpole and Walker, a complete update costing 206.0 / 221.2 / 236.8 ms at H = 5 / 15 / 30 with
+**H=30 peak VRAM 2373.8 MiB** in a steady-state update, collection at 2.796 ms/control step, and a
+derived **≈52 GPU-hours** for the 12-run final campaign.
 
 **The parameter count is the only figure here that describes the finished agent.** Every other
 number was measured on an untrained or deliberately perturbed model: `m6/`, `m7/` and `m8/` all run
 at initialization, `m8/`'s update diagnostic uses synthetic `U(−1, 1)` returns rather than
 predictions, and `m5/`'s world model saw only uniform-random data.
 
-**No return figure for a trained agent exists**, and nothing has ever stepped the environment with
-a learned policy. The random-policy return floor and the environment throughput benchmark are still
-deferred to the M9 measurement pass, and the 32.1 mean return recorded in `m5/` is a property of the
-collected random-policy data, not that floor.
+**No return figure for a trained agent exists.** A learned policy now steps the environment — the
+M9 gate collects with one and evaluates with one — but no agent has been trained past a smoke-test
+budget, so `m9/`'s evaluation returns describe a ~1,200-step agent and are a smoke signal, not a
+result. The random-policy return floor and the environment throughput benchmark are **still
+unrecorded**; `scripts/m1_random_floor.py` has been repaired (it was a copy of the throughput script
+and never accumulated a reward) and runs in the pilot pass. The 32.1 mean return recorded in `m5/`
+is a property of the collected random-policy data, not that floor.

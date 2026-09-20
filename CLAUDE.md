@@ -27,6 +27,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [docs/experiment.md](docs/experiment.md) | Before designing a final run or writing any result claim. The M10 contract: run matrix, controls, metrics, and the limits on what may be concluded. |
 | [results/README.md](results/README.md) | Before recording a number. Artifact layout and measurement rules. |
 | [results/m0/m0-audit-2026-09-17.md](results/m0/m0-audit-2026-09-17.md) | To check whether an M0 requirement is actually discharged, and what is deferred to where. |
+| [results/m9/](results/m9/) | Before quoting a runtime, a per-stage share, a memory figure or a campaign cost, and before touching the online loop, checkpointing or evaluation. The M9 integration gate (75/75 on each task), the per-stage profile at H = 5/15/30, the checkpoint cost, and what none of it establishes. |
 | [results/m8/](results/m8/) | Before quoting an entropy, a log-probability, a normalization scale or a parameter count, or touching the policy path. The M8 gate, the `tarval` and `debias` resolutions, and the REINFORCE direction check. |
 | [results/m7/](results/m7/) | Before quoting a value, a λ-return or a critic parameter count, or touching the return path. The M7 gate, the three readings of γ, and the value-vs-target fit. |
 | [results/m6/](results/m6/) | Before quoting an imagination cost or touching the rollout path. The M6 gate, the per-horizon cost/memory table, and what those numbers exclude. |
@@ -103,24 +104,48 @@ obs_t (64×64×3 uint8), a_{t-1}
 13. **Gradient routing.** Actor gradients through imagined dynamics are **blocked** (which is *why*
     REINFORCE is needed); replay-critic gradients into the encoder and RSSM are **live**. Full table:
     [spec.md §5.9](docs/spec.md).
-14. **Online loop.** **The one part that does not exist yet — M9.** During real interaction, update
-    the posterior from the current image **before** selecting an action. The environment policy uses
-    the learned latent state directly and acts on the distribution's **mean** at evaluation
-    ([spec.md §7.8](docs/spec.md)); imagination supplies training experience only.
+14. **Online loop.** **Implemented and gate-validated; not yet qualified.** During real interaction,
+    update the posterior from the current image **before** selecting an action, conditioning on the
+    **executed** previous action, not the requested one. The environment policy uses the learned
+    latent state directly and acts on the distribution's **mean** at evaluation
+    ([spec.md §7.8](docs/spec.md)); imagination supplies training experience only. The simulator is
+    rebuilt each episode from `episode_seed(base, index)`, so resume is a pure function of one
+    persisted integer — and a **mid-episode resume checkpoint is refused**, because replay's partial
+    episode has no successor observation the rebuilt simulator can produce.
 
 Where a step is conventional but not required: the vector-observation path is a development aid for
 isolating control bugs and must stay separate from final pixel results. Image decoding is required
 for M4/M5 diagnostics but is deliberately absent from the behavior-training path.
 
-## Why It Is a Target
+## Why It Is a Target — measured 2026-09-19
 
-**TBD — nothing has been profiled, so this project has no cost model and must not state one.**
+Per-stage cost of one complete update, B=16 T=64 P=5, 1024 imagination starts, 20 timed
+steady-state updates after 5 discarded warm-ups, CUDA-synchronized, on the RTX PRO 4000
+([results/m9/profile-walker-2026-09-19.csv](results/m9/profile-walker-2026-09-19.csv)):
 
-M9 step 3 produces this section: measured shares for collection, rendering, replay transfer,
-world-model updates, and behavior updates, plus representative H=30 peak memory and steady-state
-cost estimates including evaluation overhead. Until that run exists and its artifact is committed
-under `results/`, every cost statement here would be a guess. Add the measurement date to this
-heading when it is filled.
+| H | update | world model | imagination + behaviour | backward + optimizer | replay transfer | peak VRAM |
+|---|---|---|---|---|---|---|
+| 5 | 206.0 ms | 71.3 | 10.5 | 121.1 | 1.05 | 1576.3 MiB |
+| 15 | 221.2 ms | 75.5 | 21.6 | 121.6 | 0.91 | 1815.3 MiB |
+| 30 | 236.8 ms | 71.2 | 39.5 | 123.2 | 1.03 | 2373.8 MiB |
+
+Collection + rendering + the policy forward: **2.796 ms per control step**. Evaluation:
+**3.29 ms per control step**. A resume checkpoint at full occupancy: **5.744 GiB, 10.1 s**.
+
+Steady-state shares of a 4.9 h Walker H=15 run: backward + optimizer **42.7%**, world-model
+forward/loss **26.5%**, collection + rendering **15.8%**, imagination + behaviour **7.6%**,
+evaluation **3.7%**, checkpointing **2.3%**, episode simulator rebuild **0.6%**, replay transfer
+**0.3%**.
+
+**The single backward pass over the combined loss is the largest stage**, and it barely moves with
+`H`: doubling the horizon from 15 to 30 costs **7.0%** more wall clock per update, not 2×, because
+only the imagination + behaviour stage scales. **H=30 is not memory-limited** — 2373.8 MiB allocated
+of 23,986 MiB, roughly 22 GB of headroom.
+
+**The 12-run final campaign derives to ≈52 GPU-hours** (Walker 4.7 / 4.9 / 5.2 h per run at
+H = 5 / 15 / 30, Cartpole 2.5 h, three seeds each). That is a derivation from measured per-stage
+costs at a fixed 2,000-transition replay occupancy, **not a measured run**, and it excludes failed
+or restarted runs.
 
 Compute cost is not incidental — it is one of the three response variables in the horizon experiment,
 alongside return and prediction error.
@@ -229,11 +254,12 @@ training settings are context only, never the comparison.
   ```bash
   uv venv --python $(command -v python3.12) --seed .venv && .venv/bin/python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cu129 && .venv/bin/python -m pip install -r requirements.txt
   ```
-- Unit tests (170), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
-  M5 gate (26), the M6 gate (55), the M7 gate (36) and the M8 gate (63), verbatim:
+- Unit tests (247), the M1 smoke test (14 checks), the M2+M3 gate (12), the M4 gate (15), the
+  M5 gate (26), the M6 gate (55), the M7 gate (36), the M8 gate (63) and the M9 gate (75 per task),
+  verbatim:
 
   ```bash
-  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim test_imagine test_critic test_actor
+  PYTHONPATH=src:tests .venv/bin/python -m unittest test_env test_replay test_collector test_rssm test_world_model test_openloop test_optim test_imagine test_critic test_actor test_agent test_training test_checkpoint test_evaluation
   ```
 
   ```bash
@@ -258,6 +284,22 @@ training settings are context only, never the comparison.
 
   ```bash
   .venv/bin/python scripts/m8_gate.py
+  ```
+
+  The M9 gate takes a required `--tag` and **refuses to overwrite an existing artifact**:
+
+  ```bash
+  PYTHONPATH=src .venv/bin/python scripts/m9_gate.py --task cartpole --tag $(date +%Y-%m-%d)
+  ```
+
+  ```bash
+  PYTHONPATH=src .venv/bin/python scripts/m9_gate.py --task walker --tag $(date +%Y-%m-%d)
+  ```
+
+  M9's 22 mutants, each confirmed to kill its own test:
+
+  ```bash
+  .venv/bin/python scripts/m9_mutants.py
   ```
 
   The M5 gate needs the collected split and the trained checkpoint, neither of which is committed
@@ -341,65 +383,79 @@ code already says creates drift.
 
 ## Current Focus
 
-**M9 — the complete online loop.** M0 closed 2026-09-17; M1, the merged **M2+M3**, **M4**, **M5**,
-**M6** and **M7** closed 2026-09-18; **M8 closed 2026-09-19** ([results/m8/](results/m8/)).
+**M9 — infrastructure complete, empirical qualification pending.** M0 closed 2026-09-17; M1, the
+merged **M2+M3**, **M4**, **M5**, **M6** and **M7** closed 2026-09-18; **M8 closed 2026-09-19**.
+**M9's online loop, checkpointing, evaluation and profiling are implemented and gate-validated**
+2026-09-19 ([results/m9/](results/m9/)) — but **M9 is not closed.**
 
-**Every component of the agent now exists and is gate-validated.** The world model predicts
-([results/m5/](results/m5/)), imagination is validated ([results/m6/](results/m6/)), the critic and
-its return targets are validated ([results/m7/](results/m7/)), and the actor — `bounded_normal`,
-REINFORCE, `ReturnNormalizer`, `ActorActionProvider`, `behavior_losses` — is validated too. `pol` is
-measured at 50,316, so the trainable agent total of **686,846** is measured and §10-7 is discharged.
+A learned policy now steps the environment. What does not exist is **any evidence that it learns**:
+nothing has trained past a smoke-test budget, and **the M1 random-policy floor is still unrecorded**,
+so there is not yet a floor to clear.
 
-What does not exist: **the online loop.** Nothing has ever stepped the environment with a learned
-policy, and no return has ever been recorded.
+**M9 closes only when all five hold:** both pixel tasks show sustained improvement over the random
+floor, resume works (**done**), H=30 has measured memory headroom (**done**, 2373.8 MiB of 23,986),
+campaign costs are measured (**done**, ≈52 GPU-hours), and the configuration in
+[docs/config.md](docs/config.md) is frozen (**not done**).
 
-Next, in order:
+Next, in order — the pilot handoff. Run detached with the sandbox disabled, and **read the `device:`
+line** before walking away:
 
-1. M9: alternate real collection, replay sampling, world-model updates and behaviour updates, with
-   the posterior updated from the current image **before** the action is selected. One optimizer over
-   `[dyn, enc, dec, rew, con, pol, val]`; `slowval` excluded and EMA-advanced **after** the step.
-2. Checkpoint model/optimizer state, the slow critic, the `ReturnNormalizer` buffers, RNG state,
-   replay state, config and step counters. Resume at an episode boundary.
-3. Cartpole first as the debugging task, then Walker. Diagnostic evaluation every 25,000 control
-   steps over five episodes, logged separately from training time.
-4. Run the three M1 measurements deferred by decision — random-policy floor, throughput, video —
-   since M10 reads the floor.
-5. Profile the five stages and fill in `Why It Is a Target`. Measure H=30 peak memory in a
-   steady-state update, not a bare rollout.
-6. Revisit the M5 diagnostics once online learning broadens the replay distribution.
+1. Random floors and throughput, both tasks — M10 reads the floor:
+   ```bash
+   PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task walker   --env-seed 900 --policy-seed 900 --episodes 20 --output results/m1/random-floor-walker-$(date +%F).json   --video results/m1/random-walker-$(date +%F).mp4
+   PYTHONPATH=src .venv/bin/python scripts/m1_random_floor.py --task cartpole --env-seed 901 --policy-seed 901 --episodes 20 --output results/m1/random-floor-cartpole-$(date +%F).json --video results/m1/random-cartpole-$(date +%F).mp4
+   PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py   --task walker   --env-seed 902 --policy-seed 902 --steps 10000 --output results/m1/throughput-walker-$(date +%F).json
+   PYTHONPATH=src .venv/bin/python scripts/m1_throughput.py   --task cartpole --env-seed 903 --policy-seed 903 --steps 10000 --output results/m1/throughput-cartpole-$(date +%F).json
+   ```
+2. Re-profile if anything in the update path changed: `scripts/m9_profile.py --task walker --tag <date>`.
+3. **Cartpole first, as the debugging task** — 500K steps, ~2.5 h:
+   ```bash
+   setsid nohup env PYTHONPATH=src .venv/bin/python scripts/m9_train.py --task cartpole --seed 100 --out runs/m9-cartpole-s100 > runs/m9-cartpole-s100.log 2>&1 &
+   ```
+4. **Walker** — 1M steps, ~4.9 h at H=15:
+   ```bash
+   setsid nohup env PYTHONPATH=src .venv/bin/python scripts/m9_train.py --task walker --seed 100 --out runs/m9-walker-s100 > runs/m9-walker-s100.log 2>&1 &
+   ```
+5. **Resume either pilot** from its newest boundary checkpoint:
+   ```bash
+   PYTHONPATH=src .venv/bin/python scripts/m9_train.py --task walker --seed 100 --out runs/m9-walker-s100 --resume runs/m9-walker-s100/resume-<step>.pt
+   ```
+6. Learning curves from `runs/<run>/train-log.csv` and `evaluations.jsonl`; re-run the M5 open-loop
+   diagnostics against a pilot checkpoint now that online learning broadens the replay distribution.
 
-**Deferred from M1 by decision, not blocked:** random-policy return floor, throughput benchmark,
-random-policy video. Scripts are written; they run in the M9 measurement pass.
+Development seeds are **100–102**. **Final training seeds 0–2 and final evaluation seeds 1000–1019
+stay unused** until M10.
 
-`Why It Is a Target` stays `TBD`: the per-stage profile is M9's, and nothing has been profiled.
+**Deferred from M1 by decision and still outstanding:** random-policy return floor, throughput
+benchmark, random-policy video. **Step 1 above discharges all three** — `m1_random_floor.py` takes
+`--video` and `viz.write_video` pipes raw frames to `ffmpeg` (falling back to a `.npz` of the frames
+if `ffmpeg` is absent).
 
 ## Last Session
 
-**Session 12 — implemented and closed M8, the continuous actor and imagined behaviour learning.**
+**Session 13 — implemented M9's online learner, checkpointing, evaluation and qualification
+tooling. M9 remains OPEN.**
 
-- **`src/dreamer/actor.py`:** `BoundedNormal` (tanh on the mean only, unsquashed sample, **no density
-  correction**), `Actor` (measured **50,316**), `ActorActionProvider`, `ReturnNormalizer` and the
-  REINFORCE loss with entropy **subtracted** at η=3e-4. Gate **63/63**, 38 unit tests, twelve mutants
-  each confirmed to fail. The agent total closes at **686,846 measured**, discharging §10-7.
-- **Two pinned-source questions resolved and written into §5.6.** `tarval = slowval if slowtar else
-  val` with `slowtar: False`, so the **fast** critic is both bootstrap and baseline. And `retnorm` is
-  **not** bias-corrected: `configs.yaml#L111` sets `debias: False`, overriding the class default of
-  `True`, so `S` sits at its floor of 1 while the EMAs climb — measured 1.0 vs 90.0 on the same input.
-  Both branches are implemented; the default is the pin.
-- **A correlation threshold was measured, rejected, and replaced.** `corr(Δlogπ, Â)` over 15,360 real
-  imagined positions saturates at 0.13–0.50 because one 50,316-parameter network cannot raise `logπ`
-  independently everywhere — it measures capacity, not the estimator. The committed check is the
-  capacity-free `Σ w·Â·Δlogπ > 0`, which held at every learning rate tried.
-- **Two clauses of the M8 gate text needed clarifying.** "Actions stay in bounds" means *executed*
-  actions — the policy is deliberately unsquashed and `DMCEnv.step` plus the RSSM's `a/max(1,|a|)`
-  enforce the range. "Entropy remains finite" is **not** "entropy stays positive": a Gaussian with
-  `σ < 1/√(2πe)` has negative differential entropy, so the assertion is the closed-form
-  `minstd`/`maxstd` bounds. Both are recorded in `milestones.md`, and the testing-hazard list — now
-  20+ entries — moved out of this file to [docs/testing-hazards.md](docs/testing-hazards.md), which
-  this file's own thinness rule required once it passed 50 lines.
-- **One mutant survived the first suite:** the sampled action left attached. Actions leave
-  `imagine_trajectory`'s `no_grad` block already detached, so §5.6's `sg(act)` is invisible on that
-  path. A test that hands the loss an imagination whose actions carry a graph was added until it failed.
+- **Five new modules.** `config.py` (`RunConfig`, per-stream seed derivation, `episode_seed`),
+  `agent.py` (`LatentPolicy`, `EpisodicEnv`, `Agent` owning every generator), `training.py`
+  (`TrainingScheduler`, `compute_losses`/`apply_update`, `OnlineTrainer`), `checkpoint.py` (atomic
+  save, resume vs compact model checkpoints, rotation) and `evaluation.py` (isolated evaluation with
+  a fingerprint guard). Entry points `scripts/m9_{train,gate,profile,mutants}.py`.
+- **Gate 75/75 on Cartpole and 75/75 on Walker**, plus **77 new unit tests** (247 total) and
+  **22/22 mutants killed**. The Walker gate reproduces the committed counts exactly: 570,419 /
+  50,316 / 66,111, total 686,846.
+- **`Why It Is a Target` is no longer TBD.** A complete update costs 206.0 / 221.2 / 236.8 ms at
+  H = 5 / 15 / 30; backward + optimizer is 42.7% of a Walker run and barely moves with `H`, so
+  15 → 30 costs **7.0%** more per update, not 2×. H=30 peaks at 2373.8 MiB with ~22 GB headroom.
+  The 12-run campaign derives to **≈52 GPU-hours**.
+- **Two real defects found and fixed while measuring.** `torch.save`'s default pickle protocol 2
+  latin1-encodes bytes and inflated a 500,000-transition replay from 5.744 to 8.613 GiB and its
+  write from 10.1 to 41.3 s — `atomic_save` now pins protocol 5. And `scripts/m1_random_floor.py`
+  was a **byte-for-byte copy of `m1_throughput.py`** that never accumulated a reward; it now
+  measures 20 complete episodes per task.
+- **`docs/config.md` said the 500,000-transition buffer holds a complete 1M-step Walker run.** It
+  does not — 500,000 < 1,000,000. Corrected: eviction begins near the half-way point and the second
+  half of a Walker run evicts the first, whole episodes at a time.
 
 ## Known Issues
 
@@ -410,7 +466,7 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
   the environment — `uv venv --seed` does, and pip does the installs.
 - **`pytest` is not installed; the suite is `unittest` and needs `PYTHONPATH=src:tests`.** The package
   is not installed into the venv, and `unittest discover` fails because `tests/` has no `__init__.py`
-  — name the nine modules explicitly, as in the recorded command.
+  — name the fourteen modules explicitly, as in the recorded command.
 - **The reward head is invisible to testing at initialization.** `outscale: 0.0` zeroes the output
   kernel, so the two-hot loss is exactly `log(255)` regardless of the target and **no gradient
   reaches the encoder, the RSSM, or even the head's own hidden layer**. Any test of reward alignment
@@ -435,8 +491,26 @@ random-policy video. Scripts are written; they run in the M9 measurement pass.
 - **No measurement of a trained *agent* exists — only of a trained world model.** `results/m5/`
   holds open-loop prediction error and the first real training cost; `results/m6/`, `results/m7/`
   and `results/m8/` hold imagination cost, critic arithmetic and policy arithmetic measured on an
-  **untrained** model. There is still **no return, no behaviour, and no per-stage profile**: the
-  actor exists but **nothing has ever stepped the environment with a learned policy**.
+  **untrained** model; `results/m9/` holds the per-stage profile and 75/75 integration checks. A
+  learned policy now steps the environment, but **no return figure for a trained agent exists** —
+  the M9 gate's evaluation returns describe a ~1,200-step agent and are a smoke signal.
+- **`scripts/m9_gate.py` is implementation validation, NOT the M9 validation gate.** It proves the
+  loop is wired as specified. M9's actual gate is empirical: both pixel tasks must show sustained
+  improvement over the random floor. Do not read 75/75 as M9 closing.
+- **Resume is bitwise for the next update, not for a trajectory.** Two restores of the same
+  checkpoint compute an identical next update; continued for hundreds of updates they drift from
+  *each other* at ~1e-6. That is nondeterministic CUDA convolution backward, measured, not a
+  checkpoint defect — so a resume test must assert next-update equality, never trajectory equality.
+- **A resume checkpoint is refused unless replay's current episode is closed.** Mid-episode
+  simulator state is not restorable; appending to a partial episode after a rebuild would raise in
+  `ReplayBuffer.add`. `OnlineTrainer` therefore only writes a resume checkpoint at a boundary, and
+  a final stop mid-episode writes the compact model checkpoint alone.
+- **A resume checkpoint is 5.744 GiB and takes 10.1 s to write.** Two are kept, so a run needs
+  ~11.5 GiB of disk beside its log. `atomic_save` pins `pickle_protocol=5`; torch's default
+  protocol 2 latin1-encodes bytes and made the same buffer 8.613 GiB and 41.3 s.
+- **The 500,000-transition buffer does NOT hold a 1M-step Walker run.** Eviction begins near the
+  half-way point and the second half evicts the first, whole episodes at a time. `docs/config.md`
+  claimed otherwise until 2026-09-19.
 - **Every M8 entropy, log-probability and loss is a property of a random actor.** The integration
   section perturbs the reward and value kernels (otherwise the advantage is identically 0 and every
   claim about it is vacuous), and the update diagnostic uses synthetic `U(-1, 1)` returns. The

@@ -239,6 +239,83 @@ class ReplayBuffer:
             loss_mask=loss_mask,
         )
 
+    def can_sample(self, sequence_length: int) -> bool:
+        """No complete episode is long enough until warm-up has closed one (spec 7.5)."""
+        return any(e.length >= sequence_length for e in self._episodes)
+
+    def state_dict(self) -> dict:
+        """Episode arrays, the partial episode, and the sampler stream -- resume must not redraw."""
+        current = self._current
+
+        return {
+            "capacity": self.capacity,
+            "rng": self._rng.bit_generator.state,
+            "observation_shape": self._observation_shape,
+            "action_shape": self._action_shape,
+            "episodes": [
+                {
+                    "observations": episode.observations,
+                    "actions": episode.actions,
+                    "rewards": episode.rewards,
+                    "is_last": episode.is_last,
+                    "is_terminal": episode.is_terminal,
+                    "discounts": episode.discounts,
+                }
+                for episode in self._episodes
+            ],
+            "current": None
+            if current is None
+            else {
+                "observations": list(current.observations),
+                "actions": list(current.actions),
+                "rewards": list(current.rewards),
+                "is_last": list(current.is_last),
+                "is_terminal": list(current.is_terminal),
+                "discounts": list(current.discounts),
+            },
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        if int(state["capacity"]) != self.capacity:
+            raise ValueError(
+                f"checkpoint capacity {state['capacity']} does not match {self.capacity}"
+            )
+
+        self._rng.bit_generator.state = state["rng"]
+        self._observation_shape = (
+            None if state["observation_shape"] is None else tuple(state["observation_shape"])
+        )
+        self._action_shape = (
+            None if state["action_shape"] is None else tuple(state["action_shape"])
+        )
+
+        self._episodes = deque(
+            _Episode(
+                observations=np.ascontiguousarray(entry["observations"]),
+                actions=np.ascontiguousarray(entry["actions"]),
+                rewards=np.ascontiguousarray(entry["rewards"]),
+                is_last=np.ascontiguousarray(entry["is_last"]),
+                is_terminal=np.ascontiguousarray(entry["is_terminal"]),
+                discounts=np.ascontiguousarray(entry["discounts"]),
+            )
+            for entry in state["episodes"]
+        )
+        self._completed_transitions = sum(e.length for e in self._episodes)
+
+        current = state["current"]
+        self._current = (
+            None
+            if current is None
+            else _EpisodeBuilder(
+                observations=[np.ascontiguousarray(o) for o in current["observations"]],
+                actions=[np.ascontiguousarray(a) for a in current["actions"]],
+                rewards=[np.float32(r) for r in current["rewards"]],
+                is_last=[bool(v) for v in current["is_last"]],
+                is_terminal=[bool(v) for v in current["is_terminal"]],
+                discounts=[np.float32(d) for d in current["discounts"]],
+            )
+        )
+
     def stats(self) -> dict[str, int]:
         current = 0 if self._current is None else self._current.length
 

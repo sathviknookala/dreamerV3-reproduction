@@ -117,3 +117,41 @@ pass for the wrong reason. This is the single most productive source of false co
   `sum / weight.sum()` mutant survives.
 - **A metric that reports `weight.numel()` does not pin the reduction.** It is unchanged by the
   mutant it looks like it tests.
+
+## Online loop, checkpointing and evaluation (M9)
+
+- **Asserting on the embedding does not pin *which state the actor reads*.** A policy that absorbs
+  the current image and then chooses its action from the *previous* carry passes every test of the
+  posterior's inputs. Spy on `actor.forward` and compare the feature it received against
+  `policy.state.feat` after the call.
+- **The requested action and the executed one are the same tensor in a permissive fixture.** The
+  policy is unsquashed, so a test env that does not clip can never distinguish "condition on what
+  was executed" from "condition on what was requested". `tests/test_agent.py`'s `FakeEnv` clips at
+  ±0.1 and the test asserts the fixture actually exercised the clip.
+- **A time limit and a termination must be tested separately.** Both must reset the recurrence, but
+  only one zeroes the continuation target. A single `is_last` fixture passes while the
+  `is_terminal` path is untested.
+- **Trajectory equality after a resume is not a resume test — it is a determinism test, and it
+  fails.** Nondeterministic CUDA convolution backward makes two restores of the *same* checkpoint
+  drift ~1e-6 from each other over hundreds of updates. Assert **next-update** equality on
+  controlled data, which is bitwise, and measure restore-vs-restore drift before blaming the
+  checkpoint.
+- **A resume checkpoint taken during warm-up has nothing to restore.** No optimizer step has run, so
+  the moments and `_step` are empty and the provider's lazy generator is still `None`; every
+  "was it restored?" assertion passes vacuously. The M9 gate deliberately places its boundary
+  checkpoints *after* warm-up, and this cost two real failures to notice.
+- **`torch.optim.Optimizer.state_dict()` silently drops anything that is not a param-group key or
+  per-parameter state.** LaProp's `_step` drives both the bias correction and the lr warm-up, and a
+  resume that loses it restarts the warm-up. Assert on the counter, not only on the moments.
+- **A lazily-created generator is not a buffer and does not ride in `state_dict()`.**
+  `ActorActionProvider` builds its stream on first use; a checkpoint that skips it redraws every
+  imagined action after a resume while every parameter compares equal.
+- **Checkpoint rotation with a duplicated path evicts a live file.** A final save landing on the
+  same boundary as a periodic one appends the same path twice, and a naive `keep` window then
+  unlinks a checkpoint that is still the newest. Test the file count on disk, not the list length.
+- **An evaluation-isolation test needs an armed guard.** "Nothing changed" passes trivially if the
+  comparison is weak. `tests/test_evaluation.py` injects a policy that reads the collection stream
+  and asserts the guard fires.
+- **An evaluation that samples the posterior is not reproducible from the action alone.** The
+  evaluation policy takes the actor's *mean* but still samples `z_t`, so two calls on the same image
+  differ. Test the mean by spying on the distribution, not by comparing two calls.

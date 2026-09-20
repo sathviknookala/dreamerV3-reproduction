@@ -1,0 +1,4 @@
+horizon,batch,train_length,burn_in,steps,update_ms,collection_render_ms_per_transition,replay_transfer_ms,world_model_ms,imagination_behavior_ms,backward_optimizer_ms,unattributed_ms,evaluation_ms_per_step,checkpoint_s,checkpoint_mib,peak_vram_mib,reserved_vram_mib,imagination_starts,imagined_transitions
+5,16,64,5,20,205.983,2.7965,1.049,71.317,10.489,121.145,1.982,3.2835,0.067,26.4,1576.3,1966.0,1024,5120
+15,16,64,5,20,221.228,2.7965,0.912,75.45,21.583,121.572,1.711,3.2883,0.065,26.4,1815.3,2348.0,1024,15360
+30,16,64,5,20,236.791,2.7965,1.03,71.183,39.514,123.214,1.85,3.2519,0.055,26.4,2373.8,2844.0,1024,30720

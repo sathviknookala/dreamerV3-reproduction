@@ -63,9 +63,32 @@ class StepCounters:
     replay_transition: int = 0
     gradient_step: int = 0
     train_position: int = 0
+    episode: int = 0
+    imagination_start: int = 0
+    imagined_transition: int = 0
+    eval_step: int = 0
+    eval_seconds: float = 0.0
 
     def record_transition(self, physics_substeps: int) -> None:
         self.env_step += 1
         self.agent_step += 1
         self.physics_substep += physics_substeps
         self.replay_transition += 1
+
+    def record_update(self, train_positions: int, starts: int, horizon: int) -> None:
+        self.gradient_step += 1
+        self.train_position += int(train_positions)
+        self.imagination_start += int(starts)
+        self.imagined_transition += int(starts) * int(horizon)
+
+    def record_evaluation(self, steps: int, seconds: float) -> None:
+        self.eval_step += int(steps)
+        self.eval_seconds += float(seconds)
+
+    def state_dict(self) -> dict[str, float]:
+        return {f: getattr(self, f) for f in self.__slots__}
+
+    def load_state_dict(self, state: dict[str, float]) -> None:
+        for field_name in self.__slots__:
+            if field_name in state:
+                setattr(self, field_name, state[field_name])

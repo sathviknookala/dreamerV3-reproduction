@@ -36,6 +36,10 @@ The values below are starting choices to qualify during development. Hardware fi
 | Update ratio | Start with 64 replay training positions per collected transition | Log the exact definition and realized ratio; qualify learning before freezing |
 | Initial random collection | 5,000 agent transitions | Preserve the same warm-up budget in final comparisons |
 | Planning budgets | Walker: 1M control steps/run; Cartpole: 500K/run | Qualify cost and learning in M9; all Walker horizon conditions receive the same final budget |
+| Diagnostic evaluation | Every 25,000 training control steps; 5 episodes at seeds 2000–2004; mean action; video from the first seed | Isolated simulator and generators; never touches replay, optimizer, normalizer or training counters. Costs 3.29 ms/control step, ~3.7% of a Walker run ([`results/m9/`](../results/m9/)) |
+| Resume checkpointing | Every 25,000 control steps, taken at an episode boundary; latest 2 kept plus one compact final model | 5.744 GiB and 10.1 s per write at full occupancy, ~11.5 GiB peak disk per run. Raise the interval if a longer campaign makes 2.3% of wall clock matter ([`checkpoint-cost-2026-09-19.json`](../results/m9/checkpoint-cost-2026-09-19.json)) |
+| Development seeds | 100, 101, 102 | Final training seeds 0–2 and final evaluation seeds 1000–1019 stay unused until M10 |
+| Per-episode simulator seed | `episode_seed(base, episode_index)`, simulator rebuilt each episode | Makes the next episode a pure function of one persisted integer; costs 0.105 s per episode, ~0.6% of a Walker run |
 
 The [author-maintained configuration](https://github.com/danijar/dreamerv3/blob/e3f02248693a79dc8b0ebd62c93683888ddaccfe/dreamerv3/configs.yaml) supplies a useful compact scale reference through `size1m`, including deterministic size 512 and four classes. Its current defaults and architecture are not automatically equivalent to the pinned paper version. Record the actual parameter count rather than calling this implementation “1M parameters” from the preset name.
 
@@ -90,12 +94,23 @@ reference value to be qualified against.
 project counts **loss-bearing positions only**, because the burn-in prefix is recomputed rather than
 loss-bearing ([spec.md §7.5](spec.md)). State the convention whenever a realized ratio is quoted.
 
-### Replay capacity is expected to be inert, not merely reduced
+### Replay capacity is reduced, and on Walker it is NOT inert
 
-500,000 against the reference's 5,000,000. At a 1e6-step Walker budget the buffer holds the entire
-run before eviction begins, so the reduction is **hypothesised to have no effect** on these two
-tasks. The qualification rule is unchanged — measure occupancy at M9 — but it is now testing a stated
-hypothesis rather than an open question.
+500,000 against the reference's 5,000,000.
+
+**An earlier version of this section claimed the buffer holds an entire 1e6-step Walker run before
+eviction begins. That is arithmetically false** — 500,000 < 1,000,000. Eviction begins around the
+half-way point of a Walker run and the second half evicts the first, whole episodes at a time, so
+the final replay distribution covers roughly the last 500,000 control steps. Cartpole at a 500,000
+budget does fit, and there the reduction genuinely is inert.
+
+This matters for the horizon comparison only insofar as it applies identically to all three Walker
+conditions, which hold real data fixed. It matters for any claim about what the world model was
+trained on: at the end of a Walker run, the earliest half of the run is gone.
+
+The qualification rule is unchanged — measure occupancy at M9. `OnlineTrainer` logs
+`replay_occupancy` on every logged row, and eviction is episode-safe by construction
+(`ReplayBuffer._enforce_capacity` drops whole episodes and raises rather than truncating one).
 
 ### Parameter count
 

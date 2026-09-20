@@ -1,3 +1,4 @@
+from .agent import Agent, EpisodicEnv, LatentPolicy, ParameterCounts
 from .actor import (
     ACTENT,
     Actor,
@@ -9,7 +10,23 @@ from .actor import (
     behavior_losses,
     imagined_actor_loss,
 )
-from .collector import Collector, UniformRandomPolicy
+from .checkpoint import (
+    Checkpointer,
+    RunIdentity,
+    atomic_save,
+    load_checkpoint,
+    model_payload,
+    restore_resume,
+    resume_payload,
+)
+from .collector import Collector, StatefulPolicy, UniformRandomPolicy
+from .config import (
+    RunConfig,
+    TASKS,
+    TASK_BUDGETS,
+    episode_seed,
+    stream_seed,
+)
 from .critic import (
     Critic,
     CriticOutput,
@@ -26,6 +43,13 @@ from .distributions import (
     unimix_probs,
 )
 from .env import DMCEnv
+from .evaluation import (
+    EpisodeResult,
+    EvaluationResult,
+    PeriodicEvaluator,
+    evaluate_agent,
+    evaluate_episode,
+)
 from .heads import ContinuationHead, Decoder, MLPHead, RewardHead
 from .imagine import (
     ActionProvider,
@@ -65,6 +89,15 @@ from .rssm import (
     observe_sequence,
     stack_states,
 )
+from .training import (
+    LOG_COLUMNS,
+    OnlineTrainer,
+    TrainingScheduler,
+    UpdateOutput,
+    apply_update,
+    compute_losses,
+    training_update,
+)
 from .twohot import (
     make_bins,
     symexp,
@@ -74,10 +107,40 @@ from .twohot import (
     twohot_readout,
 )
 from .types import EnvStep, SequenceBatch, StepCounters, Transition
-from .viz import paired_filmstrip, write_png
+from .viz import paired_filmstrip, write_png, write_video
 from .world_model import WorldModel, WorldModelOutput, batch_to_tensors
 
 __all__ = [
+    "Agent",
+    "EpisodicEnv",
+    "LatentPolicy",
+    "ParameterCounts",
+    "Checkpointer",
+    "RunIdentity",
+    "atomic_save",
+    "load_checkpoint",
+    "model_payload",
+    "restore_resume",
+    "resume_payload",
+    "StatefulPolicy",
+    "RunConfig",
+    "TASKS",
+    "TASK_BUDGETS",
+    "episode_seed",
+    "stream_seed",
+    "EpisodeResult",
+    "EvaluationResult",
+    "PeriodicEvaluator",
+    "evaluate_agent",
+    "evaluate_episode",
+    "LOG_COLUMNS",
+    "OnlineTrainer",
+    "TrainingScheduler",
+    "UpdateOutput",
+    "apply_update",
+    "compute_losses",
+    "training_update",
+    "write_video",
     "ACTENT",
     "ActionProvider",
     "Actor",

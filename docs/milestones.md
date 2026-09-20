@@ -20,14 +20,18 @@ configuration are recorded** — not when the code runs.
 | **M6** | **CLOSED 2026-09-18.** Gate passed 55/55 plus 29 unit tests. Evidence: [`results/m6/`](../results/m6/). |
 | **M7** | **CLOSED 2026-09-18.** Gate passed 36/36 plus 45 unit tests. Evidence: [`results/m7/`](../results/m7/). |
 | **M8** | **CLOSED 2026-09-19.** Gate passed 63/63 plus 38 unit tests; `pol` measured at 50,316 and the agent total at 686,846. Evidence: [`results/m8/`](../results/m8/). |
-| **M9** | **ACTIVE.** Next milestone. |
+| **M9** | **ACTIVE — infrastructure complete, empirical qualification pending.** The online loop, checkpointing, evaluation and profiling are implemented and gate-validated: 75/75 on Cartpole and 75/75 on Walker, plus 77 new unit tests, 22/22 mutants killed, and a measured per-stage profile at H = 5/15/30. Evidence: [`results/m9/`](../results/m9/). **Not closed:** no pilot has demonstrated learning, the M1 random floor is still unrecorded, and the configuration is not frozen. |
 | M10 | Not started. |
 
 Every component of the agent — the environment contract, the RSSM state-transition core, the
-world-model objective, the imagination engine, the critic with its return targets, and now the actor
-with REINFORCE and return normalization — is `implemented` and `validated`. What does not exist is
-the **online loop** that alternates real collection with these updates, which is M9. See the status
-legend in [spec.md §11](spec.md).
+world-model objective, the imagination engine, the critic with its return targets, the actor with
+REINFORCE and return normalization, and now the **online loop** that alternates real collection with
+these updates — is `implemented` and `validated`. See the status legend in [spec.md §11](spec.md).
+
+**Implemented infrastructure is not a passed gate.** M9's gate is empirical: both pixel tasks must
+demonstrate real learning in development runs. Nothing has yet been trained past a smoke-test
+budget, so the distinction below between the *implementation* checklist and the *qualification*
+sequence is load-bearing.
 
 ---
 
@@ -338,15 +342,52 @@ Use Cartpole as the first complete-loop debugging task, followed by Walker. Vect
 
 Checkpoint model/optimizer states, slow critic, normalization statistics, RNG states, replay state, configuration, and step counters. Resume at an episode boundary unless the simulator state is also restored. Log evaluation time separately from training time, and use evaluation trajectories neither for replay updates nor gradient steps.
 
+### Implementation status — COMPLETE, 2026-09-19
+
+`src/dreamer/{config,agent,training,checkpoint,evaluation}.py`, the entry points
+`scripts/m9_{train,gate,profile,mutants}.py`, and 77 unit tests across
+`tests/test_{agent,training,checkpoint,evaluation}.py`. Evidence: [`results/m9/`](../results/m9/).
+
+Resolved while implementing, and recorded because a later session would otherwise get them wrong:
+
+- **The simulator is recreated at every episode boundary** from `episode_seed(base, index)`, so the
+  next episode is a pure function of one persisted integer. Mid-episode simulator state is not
+  restorable, so `restore_resume` **refuses** a checkpoint whose replay holds a partial episode —
+  resuming one would append a mismatched successor observation and `ReplayBuffer.add` would raise.
+  Measured cost of the rebuild: 0.105 s per episode, ~0.6% of a Walker run.
+- **Warm-up accrues no training debt but does count against the budget.** Credits are integer
+  loss-bearing positions; `take()` releases `credits // (B*T)` updates and carries the remainder,
+  which is checkpointed. Credits accrue while replay still holds no complete `P+T` episode, and the
+  debt is paid once warm-up closes one.
+- **Resume is bitwise for the next update, not for a trajectory.** Two restores of the same
+  checkpoint compute an identical next update; over hundreds of updates they drift at ~1e-6 from
+  *each other*, so the drift is nondeterministic CUDA convolution backward rather than a checkpoint
+  defect. The gate asserts next-update equivalence and says so explicitly.
+- **`atomic_save` pins `pickle_protocol=5`.** torch's default protocol 2 latin1-encodes bytes and
+  inflated the same 500,000-transition replay from 5.744 GiB to 8.613 GiB, and the write from
+  10.1 s to 41.3 s.
+- **`LatentPolicy` raises if the executed action was never fed back.** The recurrence must condition
+  on what the simulator integrated, not on the unsquashed sample the actor drew; `DMCEnv.step`
+  clips, so the two differ whenever the policy leaves the box.
+
 **Qualification sequence:**
 
-1. Run the complete learning path under development seeds, with diagnostic evaluation every 25,000 control steps using five evaluation episodes.
-2. Verify that learning persists beyond a transient return spike and that each task improves over the random floor.
-3. Profile collection, rendering, replay transfer, world-model updates, and behavior updates. Measure representative H=30 peak memory. Estimate final-run cost from steady-state measurements, including evaluation overhead.
-4. If learning stalls, inspect replay alignment, reward/value scaling, latent information, prior error, update ratio, and capacity before changing several settings at once. Repeat affected validation gates after fixes.
-5. Where feasible, run the pinned author implementation with the same task wrappers and approximate capacity/data budget to qualify the setup. A single reference run is a diagnostic, not a statistical performance benchmark.
-6. Finalize architecture, training ratio, replay handling, precision, budgets, evaluation policy, and shared hyperparameters. Create a run manifest before executing final seeds.
+1. Run the complete learning path under development seeds, with diagnostic evaluation every 25,000 control steps using five evaluation episodes. **PENDING.**
+2. Verify that learning persists beyond a transient return spike and that each task improves over the random floor. **PENDING** — the floor itself is still unrecorded; `scripts/m1_random_floor.py` is repaired and ready.
+3. Profile collection, rendering, replay transfer, world-model updates, and behavior updates. Measure representative H=30 peak memory. Estimate final-run cost from steady-state measurements, including evaluation overhead. **DONE** — [`results/m9/profile-walker-2026-09-19.csv`](../results/m9/profile-walker-2026-09-19.csv); H=30 peak 2373.8 MiB allocated in a steady-state update, ~22 GB headroom; the 12-run campaign derives to ≈52 GPU-hours.
+4. If learning stalls, inspect replay alignment, reward/value scaling, latent information, prior error, update ratio, and capacity before changing several settings at once. Repeat affected validation gates after fixes. **PENDING.**
+5. Where feasible, run the pinned author implementation with the same task wrappers and approximate capacity/data budget to qualify the setup. A single reference run is a diagnostic, not a statistical performance benchmark. **PENDING.**
+6. Finalize architecture, training ratio, replay handling, precision, budgets, evaluation policy, and shared hyperparameters. Create a run manifest before executing final seeds. **PENDING** — [config.md](config.md) is **not frozen**.
 
 **Validation gate:** Both pixel tasks demonstrate real learning in development runs; checkpoint/resume works; H=30 fits with memory headroom; and final runtime estimates are recorded. The final study starts only after this gate. If it fails, the deliverable is an investigated implementation limitation, not a claimed successful reproduction.
+
+Three of the four clauses are discharged. **Checkpoint/resume works** (75/75, both tasks),
+**H=30 fits with headroom** (2373.8 MiB of 23,986 MiB), and **runtime estimates are recorded**
+(≈52 GPU-hours for the 12 final runs). **The first clause — real learning on both pixel tasks — is
+not discharged, so the gate has not passed and M10 does not start.**
+
+The integration gate `scripts/m9_gate.py` is **not** the validation gate. It is implementation
+validation: it proves the loop is wired as specified. Its evaluation returns come from a policy
+trained on ~1,200 control steps and are a smoke signal, not evidence of learning.
 
 **Deliverable:** Frozen configuration, working online learner, resource profile, and final run manifest.

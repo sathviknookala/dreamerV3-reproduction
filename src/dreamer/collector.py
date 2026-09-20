@@ -23,6 +23,16 @@ class Policy(Protocol):
         ...
 
 
+class StatefulPolicy(Policy, Protocol):
+    """A policy carrying recurrent state needs the boundary and the EXECUTED action back."""
+
+    def reset(self) -> None:
+        ...
+
+    def observe_executed(self, action: np.ndarray) -> None:
+        ...
+
+
 class UniformRandomPolicy:
     def __init__(
         self,
@@ -66,8 +76,23 @@ class Collector:
 
         self.counters = StepCounters()
         self._observation: np.ndarray | None = None
+        # the random and sequence policies of M1-M8 are stateless and define neither hook
+        self._reset_policy = getattr(policy, "reset", None)
+        self._feed_policy = getattr(policy, "observe_executed", None)
+
+    def set_policy(self, policy: Policy) -> None:
+        """Swapping the warm-up policy for the learned one re-resolves the lifecycle hooks."""
+        self.policy = policy
+        self._reset_policy = getattr(policy, "reset", None)
+        self._feed_policy = getattr(policy, "observe_executed", None)
+
+        if self._reset_policy is not None:
+            self._reset_policy()
 
     def reset(self) -> np.ndarray:
+        if self._reset_policy is not None:
+            self._reset_policy()
+
         self._observation = self.env.reset()
         return self._observation
 
@@ -97,8 +122,15 @@ class Collector:
             self.env.physics_substeps
         )
 
+        # the EXECUTED action, not the requested one: the recurrence must see what the
+        # simulator actually integrated or the latent state diverges from the replayed batch
+        if self._feed_policy is not None:
+            self._feed_policy(step.action)
+
         if step.is_last:
-            self._observation = self.env.reset()
+            self.counters.episode += 1
+            # a time limit resets the recurrence exactly as a termination does
+            self._observation = self.reset()
         else:
             self._observation = step.next_observation
 

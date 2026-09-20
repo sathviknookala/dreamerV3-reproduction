@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import shutil
 import struct
+import subprocess
 import zlib
 from pathlib import Path
 
@@ -47,3 +49,29 @@ def paired_filmstrip(
     top, bottom = row(observed), row(predicted)
     divider = np.zeros((gap, top.shape[1], 3), dtype=np.uint8)
     return np.concatenate([top, divider, bottom], axis=0)
+
+
+def write_video(path: Path | str, frames: np.ndarray, fps: int = 25) -> str:
+    """Pipe raw rgb24 to ffmpeg; fall back to a .npz of the frames when ffmpeg is missing."""
+    frames = np.ascontiguousarray(frames)
+
+    if frames.dtype != np.uint8 or frames.ndim != 4 or frames.shape[-1] != 3:
+        raise ValueError(f"expected uint8 (T, H, W, 3) frames, got {frames.dtype} {frames.shape}")
+
+    path = Path(path)
+    ffmpeg = shutil.which("ffmpeg")
+
+    if ffmpeg is None:
+        fallback = path.with_suffix(".npz")
+        np.savez_compressed(fallback, frames=frames)
+        return str(fallback)
+
+    height, width = frames.shape[1:3]
+    command = [
+        ffmpeg, "-y", "-loglevel", "error",
+        "-f", "rawvideo", "-pix_fmt", "rgb24",
+        "-s", f"{width}x{height}", "-r", str(int(fps)),
+        "-i", "-", "-an", "-pix_fmt", "yuv420p", str(path),
+    ]
+    subprocess.run(command, input=frames.tobytes(), check=True)
+    return str(path)

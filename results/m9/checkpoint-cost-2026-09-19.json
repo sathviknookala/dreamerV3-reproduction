@@ -1,0 +1,13 @@
+{
+  "measured": "resume-checkpoint write and read at full 500,000-transition occupancy",
+  "transitions": 500000,
+  "episodes": 500,
+  "observation_bytes_gib": 5.728,
+  "file_gib": 5.744,
+  "bytes_per_transition": 12334,
+  "write_seconds": 10.08,
+  "read_seconds": 7.38,
+  "write_mib_per_s": 583.4,
+  "pickle_protocol": 5,
+  "note": "synthetic uint8 frames: this measures serialization and disk I/O only, not collection. Two resume checkpoints are kept, so peak disk is twice file_gib. torch.save's default protocol 2 latin1-encodes bytes and produced 8.613 GiB for the same buffer."
+}

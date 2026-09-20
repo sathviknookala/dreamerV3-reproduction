@@ -1,0 +1,94 @@
+{
+  "label": "implementation validation, not demonstrated learning",
+  "device": "cuda",
+  "gpu": "NVIDIA RTX PRO 4000 Blackwell",
+  "torch": "2.13.0+cu129",
+  "tf32_matmul": false,
+  "tf32_cudnn": false,
+  "config": {
+    "task": "walker",
+    "seed": 100,
+    "budget": 2100,
+    "batch_size": 8,
+    "train_length": 32,
+    "burn_in": 5,
+    "horizon": 15,
+    "replay_capacity": 10000,
+    "action_repeat": 1,
+    "warmup_transitions": 900,
+    "train_ratio": 64,
+    "lr": 4e-05,
+    "beta1": 0.9,
+    "beta2": 0.999,
+    "eps": 1e-20,
+    "agc": 0.3,
+    "lr_warmup": 1000,
+    "eval_every": 1000000000,
+    "eval_episodes": 2,
+    "eval_seed_base": 2000,
+    "eval_video": true,
+    "checkpoint_every": 1000,
+    "keep_resume_checkpoints": 2,
+    "log_every": 1,
+    "recreate_env_per_episode": true,
+    "image_size": 64
+  },
+  "stream_seeds": {
+    "init": 100000300,
+    "env": 100008219,
+    "collect": 100016138,
+    "replay": 100024057,
+    "imagine": 100031976,
+    "provider": 100039895,
+    "eval": 100047814
+  },
+  "parameters": {
+    "world_model": 570419,
+    "actor": 50316,
+    "critic": 66111,
+    "trainable_total": 686846
+  },
+  "counters": {
+    "env_step": 2103,
+    "agent_step": 2103,
+    "physics_substep": 21030,
+    "replay_transition": 2103,
+    "gradient_step": 300,
+    "train_position": 76800,
+    "episode": 2,
+    "imagination_start": 76800,
+    "imagined_transition": 1152000,
+    "eval_step": 0,
+    "eval_seconds": 0.0
+  },
+  "scheduler_remainder": 0,
+  "replay": {
+    "stored_transitions": 2103,
+    "complete_episodes": 2,
+    "current_episode_transitions": 103,
+    "capacity": 10000
+  },
+  "evaluation": {
+    "env_step": 2100,
+    "seeds": [
+      2000,
+      2001
+    ],
+    "returns": [
+      11.974963055923581,
+      22.56293979845941
+    ],
+    "lengths": [
+      1000,
+      1000
+    ],
+    "return_mean": 17.268951427191496,
+    "return_std": 5.293988371267915,
+    "eval_seconds": 6.06269947392866,
+    "eval_steps": 2000,
+    "video": "/tmp/m9-gate-8o70uuhw/gate-eval.mp4"
+  },
+  "checks_run": 75,
+  "checks_failed": [],
+  "caveat": "returns here come from a policy trained on ~1200 control steps; they are a smoke signal, not evidence of learning"
+}
