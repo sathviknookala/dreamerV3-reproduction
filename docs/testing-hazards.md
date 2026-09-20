@@ -155,3 +155,10 @@ pass for the wrong reason. This is the single most productive source of false co
 - **An evaluation that samples the posterior is not reproducible from the action alone.** The
   evaluation policy takes the actor's *mean* but still samples `z_t`, so two calls on the same image
   differ. Test the mean by spying on the distribution, not by comparing two calls.
+- **An append-only log looks correct after a resume while carrying duplicate rows.** Asserting "one
+  header" and "more lines than before" both pass while the replayed region is silently doubled.
+  Assert on the `(segment, gradient_step)` pairs, and check that the documented dedupe recovers a
+  gap-free step sequence.
+- **`latest_resume()` after a completed run is the FINAL checkpoint.** A resume test that reuses the
+  original budget then has nothing left to run and appends no rows, so every "did it continue?"
+  assertion is vacuous. Give the restored trainer a larger budget.

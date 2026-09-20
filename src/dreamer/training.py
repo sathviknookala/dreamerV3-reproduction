@@ -223,7 +223,7 @@ def training_update(
 
 
 LOG_COLUMNS = (
-    "env_step", "gradient_step", "elapsed_s", "total", "rec", "rew", "con", "dyn", "rep",
+    "segment", "env_step", "gradient_step", "elapsed_s", "eval_seconds", "total", "rec", "rew", "con", "dyn", "rep",
     "dyn_raw", "rep_raw", "reward_mae", "cont_mae", "policy", "policy_entropy",
     "policy_adv_mag", "policy_logp_mean", "policy_retnorm_scale", "policy_weight_mean",
     "value", "value_value_mean", "value_target_mean", "value_value_mae", "value_positions",
@@ -276,6 +276,9 @@ class OnlineTrainer:
 
         self._learned = False
         self._at_boundary = True
+        # a resume replays from the checkpoint to wherever the previous segment died, so those
+        # rows are written twice; the segment makes the later one identifiable rather than lost
+        self.segment = 0
         self.next_eval = config.eval_every
         self.next_checkpoint = config.checkpoint_every
         self.evaluations: list[dict] = []
@@ -310,9 +313,11 @@ class OnlineTrainer:
         counters = self.counters
         trained = max(1, counters.env_step - self.config.warmup_transitions)
         row = {
+            "segment": self.segment,
             "env_step": counters.env_step,
             "gradient_step": counters.gradient_step,
             "elapsed_s": round(self.elapsed, 3),
+            "eval_seconds": round(counters.eval_seconds, 3),
             "replay_occupancy": len(self.replay),
             "realized_train_ratio": round(counters.train_position / trained, 4),
             "peak_vram_mib": (
@@ -347,7 +352,7 @@ class OnlineTrainer:
         if self.evaluator is None:
             return
 
-        result = self.evaluator(self.agent, self.counters.env_step)
+        result = self.evaluator(self.agent, self.counters.env_step, self.segment)
         self.counters.record_evaluation(result.steps, result.seconds)
         self.evaluations.append(result.summary())
 
@@ -413,6 +418,7 @@ class OnlineTrainer:
             "optimizer": self.optimizer.state_dict(),
             "learned_policy": self._learned,
             "at_boundary": self._at_boundary,
+            "segment": self.segment,
             "next_eval": self.next_eval,
             "next_checkpoint": self.next_checkpoint,
             "elapsed": self.elapsed,
@@ -425,6 +431,8 @@ class OnlineTrainer:
         self.optimizer.load_state_dict(state["optimizer"])
         self._learned = bool(state["learned_policy"])
         self._at_boundary = bool(state.get("at_boundary", True))
+        # every restore opens a new segment, so replayed rows are ordered, not ambiguous
+        self.segment = int(state.get("segment", 0)) + 1
         self.next_eval = int(state["next_eval"])
         self.next_checkpoint = int(state["next_checkpoint"])
         self.elapsed = float(state["elapsed"])

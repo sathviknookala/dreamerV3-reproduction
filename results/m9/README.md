@@ -99,6 +99,21 @@ This is a derived estimate from measured per-stage costs at a fixed replay occup
 run. It assumes the update cost is independent of replay size beyond the measured 1.03 ms sampling,
 and it does not include a failed or restarted run.
 
+## Reading a run's log
+
+`train-log.csv` and `evaluations.jsonl` are **append-only across resumes, and a resume replays**.
+A checkpoint is older than wherever the previous segment died, so the rows between the two are
+written a second time. Both artifacts therefore carry a `segment` column, incremented on every
+restore.
+
+**Dedupe rule for any curve: keep the highest `segment` for each `gradient_step`** (for evaluations,
+for each `env_step`). Nothing is deleted, so a crashed segment stays inspectable, and the surviving
+rows are the trajectory that actually produced the final weights.
+
+`elapsed_s` is wall clock and **includes** evaluation, which is why it jumps at an evaluation
+boundary and why it rewinds at a seam. Training time is `elapsed_s - eval_seconds`; both are
+columns, and `evaluations.jsonl` records each evaluation's own seconds and steps.
+
 ## What none of this establishes
 
 - **No return.** Nothing here shows the agent learns. The M1 random floor has still not been

@@ -501,6 +501,11 @@ tooling. M9 remains OPEN.**
   checkpoint compute an identical next update; continued for hundreds of updates they drift from
   *each other* at ~1e-6. That is nondeterministic CUDA convolution backward, measured, not a
   checkpoint defect — so a resume test must assert next-update equality, never trajectory equality.
+- **A resume replays, so `train-log.csv` and `evaluations.jsonl` contain duplicated rows.** The
+  checkpoint is older than wherever the previous segment died, and the rows between the two are
+  written again. Both carry a `segment` column incremented on every restore: **plot the highest
+  `segment` per `gradient_step`**. Nothing is deleted, so the crashed segment stays inspectable.
+  `elapsed_s` is wall clock and includes evaluation; training time is `elapsed_s - eval_seconds`.
 - **A resume checkpoint is refused unless replay's current episode is closed.** Mid-episode
   simulator state is not restorable; appending to a partial episode after a rebuild would raise in
   `ReplayBuffer.add`. `OnlineTrainer` therefore only writes a resume checkpoint at a boundary, and

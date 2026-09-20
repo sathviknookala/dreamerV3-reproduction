@@ -354,6 +354,54 @@ class TestResumeRoundTrip(unittest.TestCase):
             self.assertIn("mid-episode", str(raised.exception))
 
 
+class TestResumeLogging(unittest.TestCase):
+    def test_a_resume_opens_a_new_segment_so_replayed_rows_are_identifiable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            trainer, _, _ = build_trainer(out, budget=EPISODE * 4, log_every=1)
+            self.assertEqual(trainer.segment, 0)
+            trainer.run()
+
+            path = trainer.checkpointer.latest_resume()
+            restored, _, _ = build_trainer(out, budget=EPISODE * 5, log_every=1)
+            restore_resume(restored, load_checkpoint(path))
+            self.assertEqual(restored.segment, 1)
+            restored.run()
+
+            lines = (out / "train-log.csv").read_text().strip().split("\n")
+            self.assertEqual(sum(line.startswith("segment,") for line in lines), 1)
+
+            header = lines[0].split(",")
+            rows = [dict(zip(header, line.split(","))) for line in lines[1:]]
+            self.assertEqual({r["segment"] for r in rows}, {"0", "1"})
+
+            # the documented dedupe: keep the highest segment for each gradient step
+            best = {}
+            for row in rows:
+                step = int(row["gradient_step"])
+                if step not in best or int(row["segment"]) > int(best[step]["segment"]):
+                    best[step] = row
+
+            steps = sorted(best)
+            self.assertEqual(steps, list(range(min(steps), max(steps) + 1)))
+
+    def test_the_log_survives_a_resume_without_a_second_header(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            trainer, _, _ = build_trainer(out, budget=EPISODE * 4, log_every=1)
+            trainer.run()
+            first = (out / "train-log.csv").read_text().strip().split("\n")
+
+            # a longer budget, or the newest checkpoint is the final one and nothing is left to run
+            restored, _, _ = build_trainer(out, budget=EPISODE * 6, log_every=1)
+            restore_resume(restored, load_checkpoint(trainer.checkpointer.latest_resume()))
+            restored.run()
+            second = (out / "train-log.csv").read_text().strip().split("\n")
+
+            self.assertGreater(len(second), len(first))
+            self.assertEqual(second[: len(first)], first)
+
+
 class TestRotation(unittest.TestCase):
     def test_only_the_latest_two_resume_checkpoints_are_kept(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -26,6 +26,7 @@ class EvaluationResult:
     env_step: int
     episodes: list[EpisodeResult]
     seconds: float
+    segment: int = 0
     video: str | None = None
     metrics: dict[str, float] = field(default_factory=dict)
 
@@ -52,6 +53,7 @@ class EvaluationResult:
 
     def summary(self) -> dict:
         return {
+            "segment": self.segment,
             "env_step": self.env_step,
             "seeds": [e.seed for e in self.episodes],
             "returns": self.returns,
@@ -198,7 +200,7 @@ class PeriodicEvaluator:
         self.domain, self.task = TASKS[config.task]
         self.results: list[EvaluationResult] = []
 
-    def __call__(self, agent: Agent, env_step: int) -> EvaluationResult:
+    def __call__(self, agent: Agent, env_step: int, segment: int = 0) -> EvaluationResult:
         video_path = (
             self.out_dir / f"eval-{env_step:08d}.mp4" if self.config.eval_video else None
         )
@@ -211,6 +213,7 @@ class PeriodicEvaluator:
             env_step=env_step,
             video_path=video_path,
         )
+        result.segment = segment
         self.results.append(result)
         self._append(result)
         return result
