@@ -30,6 +30,7 @@ This file is the always-loaded hub and stays thin. Detail lives in `docs/`.
 | [results/m9/](results/m9/) | Before quoting a runtime, a per-stage share, a memory figure or a campaign cost, and before touching the online loop, checkpointing or evaluation. The M9 integration gate (75/75 on each task), the per-stage profile at H = 5/15/30, the checkpoint cost, and what none of it establishes. |
 | [results/m9/pilot/](results/m9/pilot/) | **Before quoting any return for a trained agent.** The two full-budget pilots at seed 100, H=15 — Walker's learning curve, Cartpole's failure to consolidate, both raw logs, and the limits on reading either. |
 | [results/m9/controls/](results/m9/controls/) | **Before comparing a trained agent to anything.** The four-policy controls on matched initial conditions (20 episodes each, seeds 3000–3019) and the open-loop diagnostic that found Cartpole's reward predictions action-independent. |
+| [results/m9/confirmation/](results/m9/confirmation/) | **Before quoting a Walker runtime or an across-seed spread.** Two solo full-budget Walker runs at seeds 101/102 — the first measured solo runtimes (5.036 / 5.008 h), the three-seed final spread, and s101's failure to consolidate. |
 | [results/m8/](results/m8/) | Before quoting an entropy, a log-probability, a normalization scale or a parameter count, or touching the policy path. The M8 gate, the `tarval` and `debias` resolutions, and the REINFORCE direction check. |
 | [results/m7/](results/m7/) | Before quoting a value, a λ-return or a critic parameter count, or touching the return path. The M7 gate, the three readings of γ, and the value-vs-target fit. |
 | [results/m6/](results/m6/) | Before quoting an imagination cost or touching the rollout path. The M6 gate, the per-horizon cost/memory table, and what those numbers exclude. |
@@ -147,10 +148,12 @@ of 23,986 MiB, roughly 22 GB of headroom.
 **The 12-run final campaign derives to ≈52 GPU-hours** (Walker 4.7 / 4.9 / 5.2 h per run at
 H = 5 / 15 / 30, Cartpole 2.5 h, three seeds each). That is a derivation from measured per-stage
 costs at a fixed 2,000-transition replay occupancy, **not a measured run**, and it excludes failed
-or restarted runs. The two pilots are the only measured runtimes: Walker H=15 **5.61 h** and Cartpole
-**3.07 h** ([results/m9/pilot/](results/m9/pilot/)) — but they ran *concurrently on one card*, so
-Walker's 14% overshoot of its 4.9 h derivation is contention, not a solo cost. No solo full-budget
-runtime has been measured.
+or restarted runs. **Walker H=15's solo cost is now measured: 5.036 h and 5.008 h** at seeds 101
+and 102, run sequentially on an idle card
+([results/m9/confirmation/](results/m9/confirmation/)) — ≈5.02 h, only 2.5% above the 4.9 h
+derivation. That confirms the pilots' concurrent figures (Walker **5.61 h**,
+Cartpole **3.07 h**, [results/m9/pilot/](results/m9/pilot/)) overshot through contention, not cost.
+**Cartpole has no solo measurement.**
 
 Compute cost is not incidental — it is one of the three response variables in the horizon experiment,
 alongside return and prediction error.

@@ -30,6 +30,7 @@ spike, and Cartpole's does not consolidate.
 | [`checkpoint-cost-2026-09-19.json`](checkpoint-cost-2026-09-19.json) | Resume-checkpoint write/read at full 500,000-transition occupancy. |
 | [`pilot/`](pilot/) | The two full-budget pilot runs: evaluations, per-update logs, manifests, configs. **The first trained-agent returns in the project.** |
 | [`controls/`](controls/) | The four-policy qualification controls on matched initial conditions, 20 episodes per condition per task, plus the open-loop diagnostic on the trained trajectories. **The first controlled comparison of a trained agent.** |
+| [`confirmation/`](confirmation/) | Two more full-budget Walker runs at seeds 101 and 102, run sequentially on an idle card. **The first measured solo runtimes, and the three-seed final spread.** |
 
 Reproduce with:
 
