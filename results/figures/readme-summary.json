@@ -1,0 +1,67 @@
+{
+  "source_commit": "c487336e8d0842d21d8cc37d24e134628a130219",
+  "source_sha256": {
+    "results/m9/pilot/evaluations-walker-2026-09-20.jsonl": "0bb56616a899364f34c54e54de7e960c6a7d1a784bf65cb3b59f6c6c3381eca5",
+    "results/m9/pilot/run-manifest-walker-2026-09-20.json": "314e7c68f1ed91dc5a482e550dd6fdc06d628a1b59b1d5ed6fc936524f044fd9",
+    "results/m9/confirmation/evaluations-walker-s101-2026-09-21.jsonl": "ec0b84c0373d15b7d53ed0566545430deb66e57e2d2ef2369ea3d6b5cca9f26c",
+    "results/m9/confirmation/run-manifest-walker-s101-2026-09-21.json": "bf127ff59e240dcd50f78994de2734a4dd4a4a765d158efdcf6915e3282b7e4f",
+    "results/m9/confirmation/evaluations-walker-s102-2026-09-21.jsonl": "e62cbc919cf51b5229294fb4b17ddf10983c17bff4ea689b03deefe9db67b7c6",
+    "results/m9/confirmation/run-manifest-walker-s102-2026-09-21.json": "884f3dac04c59ef5003bf494765465a553827a8080d891ff93f5fdfcb5fa5673",
+    "results/m1/random-floor-walker-2026-09-20.json": "443f42837d2e5336e52141b0e8b00556effbde8308dc88134759d032dc38de8e",
+    "results/m9/controls/controls-report-walker-2026-09-20.json": "0974ffa1be8bca989fb0ce4139055aa02f2e0accce7ba4ea68a8edd1d0c00086"
+  },
+  "headline_seed100": {
+    "first_five_evaluations_mean": 29.591538248141298,
+    "last_five_evaluations_mean": 542.7083037442993
+  },
+  "floor_mean": 32.20544267760706,
+  "floor_episode_sd": 4.36715550123484,
+  "final_five_episode_means_across_training_seeds": {
+    "mean": 500.1783997858254,
+    "sample_sd": 28.819882049125336
+  },
+  "runs": {
+    "100": {
+      "final_5_episode_mean": 517.0560854267329,
+      "final_5_episode_sd": 61.27780763378048,
+      "last_five_evaluations_mean": 542.7083037442993,
+      "training_control_steps": 1000000,
+      "wall_hours": 5.610477634204758,
+      "peak_vram_mib": 1999.3,
+      "trainable_parameters": 686846,
+      "final_20_episode_mean": 539.4952257254569,
+      "final_20_episode_sd": 42.800347062992785
+    },
+    "101": {
+      "final_5_episode_mean": 466.9012116726488,
+      "final_5_episode_sd": 222.54847172130124,
+      "last_five_evaluations_mean": 355.6375568882562,
+      "training_control_steps": 1000000,
+      "wall_hours": 5.035659521023432,
+      "peak_vram_mib": 1999.3,
+      "trainable_parameters": 686846
+    },
+    "102": {
+      "final_5_episode_mean": 516.5779022580944,
+      "final_5_episode_sd": 38.692379892953234,
+      "last_five_evaluations_mean": 480.66226453788113,
+      "training_control_steps": 1000000,
+      "wall_hours": 5.007701182895237,
+      "peak_vram_mib": 1999.3,
+      "trainable_parameters": 686846
+    }
+  },
+  "matched_random": {
+    "mean": 32.50057646182832,
+    "episode_sd": 3.6439384269288495
+  },
+  "prediction": {
+    "context_length": 5,
+    "contexts": 80,
+    "samples": 8,
+    "horizon": 30,
+    "reward_mae_k30": 0.18472867188975214,
+    "shuffled_reward_mae_k30": 0.46328798942267896,
+    "shuffled_error_ratio_k30": 2.5079376400171043
+  }
+}
